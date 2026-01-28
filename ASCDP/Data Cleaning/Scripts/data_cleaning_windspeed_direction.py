@@ -99,7 +99,7 @@ def run_forecast_pipeline(
     station_df = station_df.copy()
     station_df["TIMESTAMP"] = pd.to_datetime(station_df["TIMESTAMP"])
     station_df = convert_to_numeric(station_df)
-    station_df = remove_outliers_iqr(df)
+    station_df = remove_outliers_iqr(station_df)
     # FIX: target + features selection
     required_columns = ["TIMESTAMP", target_column] + feature_columns
     station_df = station_df[[c for c in required_columns if c in station_df.columns]]
@@ -186,14 +186,14 @@ def run_forecast_pipeline(
 
 #CHANGE THIS BASED ON STATION AND VARIABLE
 df_train, df_pred = run_forecast_pipeline(
-    station_df=pd.read_csv('/Users/lizamclatchy/ASCDP/Data Cleaning/Cleaned Raw Data/Aasu_ALL_15min_data_cleaned.csv'),
-    station_name="Aasu",
-    target_column="WindDir_D1_WVT",
+    station_df=pd.read_csv('/Users/lizamclatchy/ASCDP/Data Cleaning/Cleaned Raw Data/Poloa_ALL_15min_data_cleaned.csv'),
+    station_name="Poloa",
+    target_column="WS_mph_S_WVT",
     synoptic_dfs=[synoptic_resample_df, synoptic_resample_df_1],
     station_lat=-14.282,   # <<< your station’s lat, change based on station
     station_lon=-170.710,  # <<< your station’s lon, change based on station
     normalize_weights=False
     )
 #CHANGE THIS NAME
-df_train.to_csv("/Users/lizamclatchy/ASCDP/Data Cleaning/Cleaned Model Input Data/train_aasu_WindDir_D1_WVT.csv", index=False)
-df_pred.to_csv("/Users/lizamclatchy/ASCDP/Data Cleaning/Cleaned Model Input Data/pred_aasu_WindDir_D1_WVT.csv", index=False)
+df_train.to_csv("/Users/lizamclatchy/ASCDP/Data Cleaning/Cleaned Model Input Data/train_poloa_WS_mph_S_WVT.csv", index=False)
+#df_pred.to_csv("/Users/lizamclatchy/ASCDP/Data Cleaning/Cleaned Model Input Data/pred_aasu_WindDir_D1_WVT.csv", index=False)
