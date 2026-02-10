@@ -29,24 +29,6 @@ def haversine_distance(lat1, lon1, lat2, lon2):
     c = 2 * np.arcsin(np.sqrt(a))
     return R * c
 
-def remove_outliers_iqr(df, multiplier=3.0):
-    """
-    Remove outliers from all numeric columns using the IQR method.
-    Keeps TIMESTAMP and non-numeric columns unchanged.
-    """
-    df_clean = df.copy()
-    numeric_cols = df_clean.select_dtypes(include=[np.number]).columns
-    
-    for col in numeric_cols:
-        Q1 = df_clean[col].quantile(0.25)
-        Q3 = df_clean[col].quantile(0.75)
-        IQR = Q3 - Q1
-        lower = Q1 - multiplier * IQR
-        upper = Q3 + multiplier * IQR
-        # Replace extreme values with NaN (so they get handled naturally in interpolation)
-        df_clean[col] = df_clean[col].mask((df_clean[col] < lower) | (df_clean[col] > upper))
-    
-    return df_clean
 # Load and prep station data
 renamed_stations = []
 stations = {}
@@ -61,7 +43,6 @@ for name, path in station_files.items():
     if all(col in df.columns for col in required_columns):
         df_renamed = df[required_columns].copy()
         df_renamed = df_renamed.rename(columns={col: f"{col}_{name}" for col in required_columns if col != 'TIMESTAMP'})
-        df_renamed = remove_outliers_iqr(df_renamed)
         renamed_stations.append(df_renamed)
         stations[name] = df
 
@@ -96,6 +77,27 @@ def apply_idw_weights(combined_df, target_station='Vaipito', power=2):
                 combined_df[f'weighted_{var}_{s}'] = combined_df[c] * combined_df[w]
     return combined_df
 
+def circular_interp_wind(df):
+    """Correct circular interpolation for wind direction using u/v vectors weighted by wind speed."""
+    wd = df['wind_direction_set_1']
+    ws = df['wind_speed_set_1']
+
+    wd_rad = np.deg2rad(wd)
+
+    # unit vectors scaled by wind speed
+    u = np.sin(wd_rad) * ws
+    v = np.cos(wd_rad) * ws
+
+    # interpolate u and v
+    u_i = u.interpolate("akima")
+    v_i = v.interpolate("akima")
+
+    # convert back to degrees
+    wd_new = np.rad2deg(np.arctan2(u_i, v_i))
+    wd_new = (wd_new + 360) % 360
+
+    return wd_new
+
 def process_synoptic_file(path):
     df = pd.read_csv(path, skiprows=[1])
     df["TIMESTAMP"] = pd.to_datetime(df["TIMESTAMP"], utc=True, errors='coerce').dt.tz_localize(None).dt.round('15min')
@@ -106,7 +108,18 @@ def process_synoptic_file(path):
              'wind_speed_set_1', 'wind_direction_set_1', 'Elevation']]
     df = convert_to_numeric(df)
     df = df.groupby('TIMESTAMP', as_index=False).mean(numeric_only=True)
-    df = df.set_index('TIMESTAMP').resample('15min').interpolate('akima').reset_index()
+    df = df.set_index('TIMESTAMP').resample('15min').mean()
+
+    # interpolate scalar variables normally
+    df[['air_temp_set_1','relative_humidity_set_1','wind_speed_set_1','Elevation']] = (
+        df[['air_temp_set_1','relative_humidity_set_1','wind_speed_set_1','Elevation']]
+        .interpolate("akima")
+    )
+    
+    # interpolate wind direction correctly
+    df['wind_direction_set_1'] = circular_interp_wind(df)
+    
+    df = df.reset_index()
     df['LAT'] = lat
     df['LON'] = lon
     return df
@@ -139,16 +152,16 @@ synoptic_files = [
 synoptic_dfs = [process_synoptic_file(p) for p in synoptic_files]
 #Uncomment these based on what is the target , dropping variables that are missing during modeling
 
-#combined_df = combined_df.drop(columns=['RH_Aasu'], errors='ignore')
-#combined_df = combined_df.drop(columns=['AirTF_Avg_Aasu'], errors='ignore')
-combined_df = combined_df.drop(columns=['SlrMJ_Tot_Poloa'], errors='ignore')
-combined_df = combined_df.drop(columns=['SlrW_Avg_Poloa'], errors='ignore')
-combined_df = combined_df.drop(columns=['SlrW_Avg_Vaipito'], errors='ignore')
+combined_df = combined_df.drop(columns=['RH_Aasu'], errors='ignore')
+combined_df = combined_df.drop(columns=['AirTF_Avg_Aasu'], errors='ignore')
+#combined_df = combined_df.drop(columns=['SlrMJ_Tot_Poloa'], errors='ignore')
+#combined_df = combined_df.drop(columns=['SlrW_Avg_Poloa'], errors='ignore')
+#combined_df = combined_df.drop(columns=['SlrW_Avg_Vaipito'], errors='ignore')
 #combined_df = combined_df.drop(columns=['SlrMJ_Tot_Vaipito'], errors='ignore')
 #combined_df = combined_df.drop(columns=['Rain_in_Tot_Aasu'], errors='ignore')
 
 # Example: combine, add distance, IDW, synoptic for Vaipito
-target_station = 'Vaipito'
+target_station = 'Aasu'
 combined_df = add_distance_to_target(combined_df, target_station)
 combined_df = apply_idw_weights(combined_df, target_station)
 combined_df = integrate_synoptic(combined_df, stations[target_station], target_station, synoptic_dfs)
@@ -190,6 +203,10 @@ date_config = {
   "cutoff": "2022-03-22 06:00:00",
   "start": "2022-03-22 06:00:00",
   "end": "2022-08-14 11:30:00"  },
+ ('Aasu','Rain_in_Tot'): {
+   "cutoff": "2020-04-14 00:20:00",
+   "start": "2020-04-14 00:20:00",
+   "end": "2022-03-25 13:45:00"  }
 
 }
 
@@ -221,9 +238,9 @@ def create_train_pred_splits(df, target_station, target_variable, config_dict, s
 
 df_train, df_pred = create_train_pred_splits(
     combined_df,
-    target_station='Vaipito',
-    target_variable='SlrMJ_Tot',
+    target_station='Aasu',
+    target_variable='Rain_in_Tot',
     config_dict=date_config
 )
-df_train.to_csv("/Users/lizamclatchy/ASCDP/Data Cleaning/Cleaned Model Input Data/vaipito_SlrMJ_Tot_train.csv", index=False)
-df_pred.to_csv("/Users/lizamclatchy/ASCDP/Data Cleaning/Cleaned Model Input Data/vaipito_SlrMJ_Tot_pred.csv", index=False)
+df_train.to_csv("/Users/lizamclatchy/ASCDP/Data Cleaning/Cleaned Model Input Data/aasu_Rain_in_Tot_train.csv", index=False)
+#df_pred.to_csv("/Users/lizamclatchy/ASCDP/Data Cleaning/Cleaned Model Input Data/vaipito_SlrMJ_Tot_pred.csv", index=False)
