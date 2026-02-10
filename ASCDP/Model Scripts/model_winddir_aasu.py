@@ -28,15 +28,39 @@ from sklearn.metrics import mean_absolute_error, r2_score, mean_squared_error
 
 
 #Using a regression model to adequately predict wind data, not forecasting, learning and predicting missing
-combined_df = pd.read_csv("/Users/lizamclatchy/ASCDP/Data Cleaning/Cleaned Model Input Data/train_aasu_WindDir_SD1_WVT.csv")
-selected_columns = ['TIMESTAMP', 'WindDir_SD1_WVT'] + [col for col in combined_df.columns if col not in ['TIMESTAMP', 'WindDir_SD1_WVT']]
+combined_df = pd.read_csv("/Users/benslattery/ASCDP/Data Cleaning/Cleaned Model Input Data/train_aasu_WindDir_D1_WVT.csv")
+selected_columns = ['TIMESTAMP', 'WindDir_D1_WVT'] + [col for col in combined_df.columns if col not in ['TIMESTAMP', 'WindDir_D1_WVT']]
 rh_data = combined_df[selected_columns].copy()
-rh_data = rh_data.dropna(subset=['WindDir_SD1_WVT'])  # Keep only rows where RH_Aasu is not NaN
+
+
+def add_dir_vectors(df, dir_cols, drop_original=True):
+    """
+    For each direction column in degrees, add _sin and _cos columns.
+    """
+    df = df.copy()
+    for col in dir_cols:
+        if col in df.columns:
+            x = pd.to_numeric(df[col], errors="coerce")
+            theta = np.deg2rad(x)
+            df[f"{col}_sin"] = np.sin(theta)
+            df[f"{col}_cos"] = np.cos(theta)
+            if drop_original:
+                df.drop(columns=[col], inplace=True)
+    return df
+direction_degree_cols = [
+  
+      'WindDir_D1_WVT'
+  
+  ]
+rh_data = add_dir_vectors(rh_data, direction_degree_cols, drop_original=True)
+
+rh_data = rh_data.dropna(subset=['WindDir_D1_WVT'])  # Keep only rows where RH_Aasu is not NaN
 
 def feature_engineering(df):
     df = df.copy()
     df['TIMESTAMP'] = pd.to_datetime(df['TIMESTAMP'])
-    target_column = 'WindDir_SD1_WVT'
+    target_column = 'WindDir_D1_WVT'
+
     feature_cols = [col for col in df.columns if col not in ['TIMESTAMP', target_column,'Elevation_target','synoptic_elevation_1','synoptic_elevation_0']]    
     for col in feature_cols:
         df[f'{col}_lag1'] = df[col].shift(2)
@@ -45,9 +69,6 @@ def feature_engineering(df):
         df[f'{col}_rolling2'] = df[col].rolling(window=2).mean()
         df[f'{col}_rolling4'] = df[col].rolling(window=4).mean()
         df[f'{col}_rolling6'] = df[col].rolling(window=6).mean()
-    feat_only = [c for c in df.columns if c not in ['TIMESTAMP', target_column]]
-    df[feat_only] = df[feat_only].apply(pd.to_numeric, errors='coerce')
-    df[feat_only] = df[feat_only].ffill()
     
     # Add more granular time features
     df['hour_of_day'] = pd.to_datetime(df['TIMESTAMP']).dt.hour
@@ -75,19 +96,13 @@ def feature_engineering(df):
     df = pd.concat([df, season_dummies], axis=1)
     df.drop(columns=['season'], inplace=True)
 
-    # Heat Index (approximation using air temp and RH)
-    if 'AirTF_target' in df.columns and 'RH_target' in df.columns:
-        df['heat_index_target'] = df['AirTF_target'] * df['RH_target'] / 100
-        df['temp_trend_1h_target'] = df['AirTF_target'].rolling(6).apply(lambda x: x.iloc[-1] - x.iloc[0], raw=False)
-
-    df['wind_per_rh'] = df['wind_speed_weighted_0_rolling6'] / (df['relative_humidity_weighted_0_rolling6'] + 1e-3)
-    df['solar_per_temp'] = df['SolarMJ_target_rolling4'] / (df['air_temp_weighted_0_rolling6'] + 1e-3)
-
+    
     for col in df.columns:
         if col != 'TIMESTAMP':
             df[col] = pd.to_numeric(df[col], errors='coerce')
+    df['wind_per_rh'] = df['wind_speed_weighted_0_rolling6'] / (df['relative_humidity_weighted_0_rolling6'] + 1e-3)
+    df['solar_per_temp'] = df['SolarMJ_target_rolling6'] / (df['AirTF_target_rolling6'] + 1e-3)
     return df
-
 # --- Angular error utilities for circular targets (degrees) ---
 def _angular_error(y_true_deg, y_pred_deg):
     y_true_deg = np.asarray(y_true_deg, dtype=float)
@@ -131,9 +146,13 @@ def prepare_train_test_data(df, target_column, test_size=0.2):
     y_train = train_df[target_column]
     X_test = test_df.drop(columns=[target_column, 'TIMESTAMP'])
     y_test = test_df[target_column]
+    X_train = X_train.dropna()
+    y_train = y_train.loc[X_train.index]
+    X_test = X_test.dropna()
+    y_test = y_test.loc[X_test.index]
     return X_train, X_test, y_train, y_test
 
-target_column = 'WindDir_SD1_WVT'
+target_column = 'WindDir_D1_WVT'
 
 X_train, X_test, y_train, y_test = prepare_train_test_data(rh_data, target_column)
 
@@ -331,12 +350,149 @@ for name, pred in [
 
 metrics_df = pd.DataFrame(rows)
 
-metrics_df = pd.DataFrame(rows)
+
 
 # Save (change path/name as you like)
-out_path = "/Users/lizamclatchy/ASCDP/Results Analysis/WindDir_SD1_WVT_aasu_model_error_metrics.csv"
-metrics_df.to_csv(out_path, index=False)
+out_path = "/Users/benslattery/ASCDP/Results Analysis/WindDir_D1_WVT_aasu_model_error_metrics.csv"
+#metrics_df.to_csv(out_path, index=False)
 
-print(f"Saved model metrics to: {out_path}")
+#print(f"Saved model metrics to: {out_path}")
 print(metrics_df)
 
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+
+# --- 1) Build your HEC colormap (continuous) ---
+hec_colors = ['#0E7C7BFF', '#17BEBBFF', '#D4F4DDFF', '#D62246FF', '#4B1D3FFF']
+cmap = mcolors.LinearSegmentedColormap.from_list("hec_colors", hec_colors, N=256)
+
+# (Optional) visualize the gradient
+plt.figure(figsize=(10, 2))
+gradient = np.linspace(0, 1, 300).reshape(1, -1)
+plt.imshow(gradient, aspect="auto", cmap=cmap)
+plt.title("HEC Color Gradient")
+plt.axis("off")
+plt.show()
+
+def rename_features(features, rename_map=None):
+    """
+    Returns a renamed list of feature labels using rename_map.
+    Any feature not found in rename_map is returned unchanged.
+    """
+    if rename_map is None:
+        return list(features)
+    return [rename_map.get(f, f) for f in features]
+
+# --- 2) Helper to pull importances from a FITTED model and plot with gradient-by-importance ---
+def plot_feature_importance_gradient(
+    model,
+    model_type,
+    feature_names,
+    max_features=10,
+    importance_type="gain",
+    title=None,
+    high_is_dark=True,
+    rename_map=None,   # <-- now supported
+):
+    # ---- extract (feature, importance) pairs ----
+    if model_type.lower() == "xgboost":
+        score = model.get_booster().get_score(importance_type=importance_type)  # dict
+        pairs = []
+        for k, v in score.items():
+            if k.startswith("f"):
+                idx = int(k[1:])
+                fname = feature_names[idx] if idx < len(feature_names) else k
+            else:
+                fname = k
+            pairs.append((fname, float(v)))
+
+    elif model_type.lower() == "lightgbm":
+        vals = model.booster_.feature_importance(importance_type=importance_type)
+        names = model.booster_.feature_name()
+        imp_map = dict(zip(names, vals))
+        pairs = [(fn, float(imp_map.get(fn, 0.0))) for fn in feature_names]
+
+    else:
+        raise ValueError("model_type must be 'xgboost' or 'lightgbm'")
+
+    # ---- sort + select top features ----
+    pairs = sorted(pairs, key=lambda x: x[1], reverse=True)[:max_features]
+
+    # Reverse for barh so largest ends up at top visually
+    feat = [p[0] for p in pairs][::-1]
+    imp  = np.array([p[1] for p in pairs][::-1], dtype=float)
+
+    # ---- apply renaming via helper ----
+    feat = rename_features(feat, rename_map)
+
+    # ---- map importance -> gradient colors ----
+    if imp.max() == imp.min():
+        normed = np.zeros_like(imp)
+    else:
+        normed = (imp - imp.min()) / (imp.max() - imp.min())
+
+    t = normed if high_is_dark else (1 - normed)
+    bar_colors = [cmap(x) for x in t]
+
+    # ---- plot ----
+    plt.figure(figsize=(10, 6))
+    plt.barh(feat, imp, color=bar_colors)
+    plt.xlabel(f"importance ({importance_type})")
+    plt.title(title or f"{model_type.capitalize()} Feature Importance (top {max_features})")
+    plt.tight_layout()
+    plt.show()
+
+
+# --- 3) Example usage (NO retraining needed) ---
+# Make sure model_xgb and model_lgbm are already fitted, and X_train exists.
+rename_map = {
+    # Wind (weighted)
+    "wind_speed_weighted_0": "Pago Pago Weighted Wind Speed",
+    "wind_speed_weighted_0_rolling2": "Pago Pago Weighted Wind Speed, Rolling 2",
+    "wind_speed_weighted_0_rolling4": "Pago Pago Weighted Wind Speed, Rolling 4",
+    "wind_speed_weighted_0_rolling6": "Pago Pago Weighted Wind Speed, Rolling 6",
+    "wind_speed_weighted_0_lag6": "Pago Pago Weighted Wind Speed, Lag 6",
+
+    # Temp (target station)
+    "PTemp_target": "Temperature of Target Station",
+    "PTemp_target_rolling2": "Temperature of Target Station, Rolling 2",
+    "PTemp_target_rolling4": "Temperature of Target Station, Rolling 4",
+    "PTemp_target_lag1": "Temperature of Target Station, Lag 1",
+
+    # Other features from your plot
+    "month": "Month",
+    "solar_per_temp": "Solar / Temp",
+    "RH_target": "Relative Humidity of Target Station",
+
+    # Time indicator
+    "is_daytime": "Daytime",
+}
+
+
+    
+#    "wind_speed_weighted_0_lag1": "Weight'
+
+plot_feature_importance_gradient(
+    model_xgb,
+    model_type="xgboost",
+    feature_names=X_train.columns,
+    max_features=10,
+    importance_type="gain",
+    title="XGBoost Feature Importance: Aasu, WindDir_SD1_WVT",
+    high_is_dark=True,
+    rename_map=rename_map
+)
+
+plot_feature_importance_gradient(
+    model_lgbm,
+    model_type="lightgbm",
+    feature_names=X_train.columns,
+    max_features=10,
+    importance_type="gain",
+    title="LightGBM Feature Importance: Aasu, WindDir_SD1_WVT",
+    high_is_dark=True,
+    rename_map=rename_map
+)
