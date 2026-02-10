@@ -130,8 +130,8 @@ def process_synoptic_file(file_path: str, skip_rows: int = 0) -> pd.DataFrame:
     return out
 
 
-synoptic_resample_df = process_synoptic_file('/Users/benslattery/ASCDP/Data Cleaning/Cleaned Raw Data/NSTU.2022-12-31.csv') #, skip_rows=2249)
-synoptic_resample_df_1 = process_synoptic_file('/Users/benslattery/ASCDP/Data Cleaning/Cleaned Raw Data/SFGP6.2022-12-31.csv') #, skip_rows=2248)
+synoptic_resample_df = process_synoptic_file('/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Raw Data/NSTU.2022-12-31.csv') #, skip_rows=2249)
+synoptic_resample_df_1 = process_synoptic_file('/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Raw Data/SFGP6.2022-12-31.csv') #, skip_rows=2248)
 
 
 def run_forecast_pipeline(
@@ -251,7 +251,7 @@ def run_forecast_pipeline(
 
 #CHANGE THIS BASED ON STATION AND VARIABLE
 df_train, df_pred = run_forecast_pipeline(
-    station_df=pd.read_csv('/Users/benslattery/ASCDP/Data Cleaning/Cleaned Raw Data/Poloa_ALL_15min_data_cleaned.csv'),
+    station_df=pd.read_csv('/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Raw Data/Poloa_ALL_15min_data_cleaned.csv'),
 
     station_name="Poloa",
     target_column="WindDir_SD1_WVT",
@@ -261,5 +261,5 @@ df_train, df_pred = run_forecast_pipeline(
     normalize_weights=False
     )
 #CHANGE THIS NAME
-df_train.to_csv("/Users/benslattery/ASCDP/Data Cleaning/Cleaned Model Input Data/train_poloa_WindDir_SD1_WVT.csv", index=False)
+df_train.to_csv("/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Model Input Data/train_poloa_WindDir_SD1_WVT.csv", index=False)
 #df_pred.to_csv("/Users/lizamclatchy/ASCDP/Data Cleaning/Cleaned Model Input Data/pred_aasu_WindDir_D1_WVT.csv", index=False)
