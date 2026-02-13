@@ -186,13 +186,13 @@ synoptic_files = [
 synoptic_dfs = [process_synoptic_file(p) for p in synoptic_files]
 
 # Uncomment these based on what is the target, dropping variables that are missing during modeling
-combined_df = combined_df.drop(columns=['RH_Aasu'], errors='ignore')
+#combined_df = combined_df.drop(columns=['RH_Aasu'], errors='ignore')
 combined_df = combined_df.drop(columns=['AirTF_Avg_Aasu'], errors='ignore')
 #combined_df = combined_df.drop(columns=['SlrMJ_Tot_Poloa'], errors='ignore')
 #combined_df = combined_df.drop(columns=['SlrW_Avg_Poloa'], errors='ignore')
 #combined_df = combined_df.drop(columns=['SlrW_Avg_Vaipito'], errors='ignore')
 #combined_df = combined_df.drop(columns=['SlrMJ_Tot_Vaipito'], errors='ignore')
-#combined_df = combined_df.drop(columns=['Rain_in_Tot_Aasu'], errors='ignore')
+combined_df = combined_df.drop(columns=['Rain_in_Tot_Aasu'], errors='ignore')
 
 # Example: combine, add distance, IDW, synoptic for target station
 target_station = 'Aasu'
@@ -271,8 +271,8 @@ def create_train_pred_splits(df, target_station, target_variable, config_dict, s
 df_train, df_pred = create_train_pred_splits(
     combined_df,
     target_station='Aasu',
-    target_variable='Rain_in_Tot',
+    target_variable='RH',
     config_dict=date_config
 )
-df_train.to_csv("/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Model Input Data/aasu_Rain_in_Tot_train.csv", index=False)
+df_train.to_csv("/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Model Input Data/aasu_rh_train.csv", index=False)
 # df_pred.to_csv("/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Model Input Data/aasu_Rain_in_Tot_pred.csv", index=False)
