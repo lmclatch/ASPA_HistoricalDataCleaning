@@ -26,10 +26,13 @@ from sklearn.linear_model import Ridge
 from sklearn.linear_model import ElasticNetCV
 from sklearn.metrics import mean_absolute_error, r2_score, mean_squared_error
 
-
+#Set seed
+import random
+random.seed(42)        
+np.random.seed(42)
 
 #Using a regression model to adequately predict wind data, not forecasting, learning and predicting missing
-combined_df = pd.read_csv("/Users/benslattery/ASCDP/Data Cleaning/Cleaned Model Input Data/train_poloa_WindDir_SD1_WVT.csv")
+combined_df = pd.read_csv("/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Model Input Data/train_afono_WindDir_SD1_WVT.csv")
 selected_columns = ['TIMESTAMP', 'WindDir_SD1_WVT'] + [col for col in combined_df.columns if col not in ['TIMESTAMP', 'WindDir_SD1_WVT']]
 rh_data = combined_df[selected_columns].copy()
 rh_data = rh_data.dropna(subset=['WindDir_SD1_WVT'])  # Keep only rows where RH_Aasu is not NaN
@@ -44,9 +47,9 @@ def feature_engineering(df):
     target_column = 'WindDir_SD1_WVT'
     feature_cols = [col for col in df.columns if col not in ['TIMESTAMP', target_column,'Elevation_target','synoptic_elevation_1','synoptic_elevation_0']]    
     for col in feature_cols:
-        df[f'{col}_lag1'] = df[col].shift(2)
-        df[f'{col}_lag3'] = df[col].shift(5)
-        df[f'{col}_lag6'] = df[col].shift(7)
+        df[f'{col}_lag1'] = df[col].shift(1)
+        df[f'{col}_lag3'] = df[col].shift(3)
+        df[f'{col}_lag6'] = df[col].shift(6)
         df[f'{col}_rolling2'] = df[col].rolling(window=2).mean()
         df[f'{col}_rolling4'] = df[col].rolling(window=4).mean()
         df[f'{col}_rolling6'] = df[col].rolling(window=6).mean()
@@ -164,7 +167,7 @@ def xgboost_regression(X_train, X_test, y_train, y_test, target_column, n_splits
         return np.mean(mae_scores)
 
     # --- 4. Run Optuna ---
-    study = optuna.create_study(direction='minimize')
+    study = optuna.create_study(direction='minimize', sampler=optuna.samplers.TPESampler(seed=42))
     study.optimize(objective, n_trials=100)
     best_params = study.best_params
     print("Best Params:", best_params)
@@ -253,7 +256,7 @@ def lightgbm_regression(X_train, X_test, y_train, y_test, target_column, n_split
         return np.mean(mae_scores)
 
     # --- 3. Run Optuna ---
-    study = optuna.create_study(direction='minimize')
+    study = optuna.create_study(direction='minimize', sampler=optuna.samplers.TPESampler(seed=42))
     study.optimize(objective, n_trials=100)
     best_params = study.best_params
     print("Best Params (LGBM):", best_params)
@@ -336,11 +339,18 @@ for name, pred in [
 metrics_df = pd.DataFrame(rows)
 
 # Save (change path/name as you like)
-out_path = "/Users/benslattery/ASCDP/Results Analysis/Poloa_WindDir_SD1_WVT_error_metrics.csv"
+out_path = "/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Results Analysis/Afono_WindDir_SD1_WVT_error_metrics.csv"
 metrics_df.to_csv(out_path, index=False)
 
 #print(f"Saved model metrics to: {out_path}")
 print(metrics_df)
+###SAVE MODELS
+
+import joblib
+joblib.dump(model_xgb, 'afono_windsd1_model_xgb.pkl')
+joblib.dump(model_lgbm, 'afono_wind_sd1model_lgbm.pkl')
+joblib.dump(stack, 'afono_windsd1_stack.pkl')
+
 
 import re
 import textwrap
@@ -614,7 +624,7 @@ def plot_feature_importance_discrete(
 
 # --- Usage example for this variable (Std of Wind Direction at Poloa) ---
 
-TITLE = "Std of Wind Direction (\N{DEGREE SIGN}) Poloa"
+TITLE = "Std of Wind Direction (\N{DEGREE SIGN}) Afono"
 
 plot_feature_importance_discrete(
     model_lgbm,
