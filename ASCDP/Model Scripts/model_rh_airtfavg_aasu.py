@@ -32,11 +32,11 @@ random.seed(42)
 np.random.seed(42)
 
 #Using a regression model to adequately predict wind data, not forecasting, learning and predicting missing
-combined_df = pd.read_csv("/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Model Input Data/train_afono_WindDir_SD1_WVT.csv")
-selected_columns = ['TIMESTAMP', 'WindDir_SD1_WVT'] + [col for col in combined_df.columns if col not in ['TIMESTAMP', 'WindDir_SD1_WVT']]
+combined_df = pd.read_csv("/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Model Input Data/aasu_airtfavg_train.csv")
+selected_columns = ['TIMESTAMP', 'AirTF_Avg_Aasu'] + [col for col in combined_df.columns if col not in ['TIMESTAMP', 'AirTF_Avg_Aasu']]
 rh_data = combined_df[selected_columns].copy()
-rh_data = rh_data.dropna(subset=['WindDir_SD1_WVT'])  # Keep only rows where RH_Aasu is not NaN
-#rh_data = rh_data[rh_data.index <= 2500] only for Airtf_avg_aasu
+rh_data = rh_data.dropna(subset=['AirTF_Avg_Aasu'])  # Keep only rows where RH_Aasu is not NaN
+rh_data = rh_data[rh_data.index <= 2500] #only for Airtf_avg_aasu
 
 
 
@@ -44,7 +44,7 @@ def feature_engineering(df):
     df = df.copy()
     df['TIMESTAMP'] = pd.to_datetime(df['TIMESTAMP'])
   
-    target_column = 'WindDir_SD1_WVT'
+    target_column = 'AirTF_Avg_Aasu'
     feature_cols = [col for col in df.columns if col not in ['TIMESTAMP', target_column,'Elevation_target','synoptic_elevation_1','synoptic_elevation_0']]    
     for col in feature_cols:
         df[f'{col}_lag1'] = df[col].shift(1)
@@ -130,7 +130,7 @@ def prepare_train_test_data(df, target_column, test_size=0.2):
     y_test = y_test.loc[X_test.index]
     return X_train, X_test, y_train, y_test
 
-target_column = 'WindDir_SD1_WVT'
+target_column = 'AirTF_Avg_Aasu'
 
 X_train, X_test, y_train, y_test = prepare_train_test_data(rh_data, target_column)
 
@@ -339,7 +339,7 @@ for name, pred in [
 metrics_df = pd.DataFrame(rows)
 
 # Save (change path/name as you like)
-out_path = "/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Results Analysis/Afono_WindDir_SD1_WVT_error_metrics.csv"
+out_path = "/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Results Analysis/AirTF_Avg_aasu_error_metrics.csv"
 metrics_df.to_csv(out_path, index=False)
 
 #print(f"Saved model metrics to: {out_path}")
@@ -347,9 +347,9 @@ print(metrics_df)
 ###SAVE MODELS
 
 import joblib
-joblib.dump(model_xgb, 'afono_windsd1_model_xgb.pkl')
-joblib.dump(model_lgbm, 'afono_wind_sd1model_lgbm.pkl')
-joblib.dump(stack, 'afono_windsd1_stack.pkl')
+joblib.dump(model_xgb, 'airtfavg_aasu_model_xgb.pkl')
+joblib.dump(model_lgbm, 'airtfavg_aasu_sd1model_lgbm.pkl')
+joblib.dump(stack, 'airtfavg_aasu_stack.pkl')
 
 
 import re
@@ -623,8 +623,8 @@ def plot_feature_importance_discrete(
     plt.show()
 
 # --- Usage example for this variable (Std of Wind Direction at Poloa) ---
-
-TITLE = "Std of Wind Direction (\N{DEGREE SIGN}) Afono"
+TITLE = "Average Air Temperature (C) of Aasu"
+#TITLE = "Std of Wind Direction (\N{DEGREE SIGN}) Afono"
 
 plot_feature_importance_discrete(
     model_lgbm,
