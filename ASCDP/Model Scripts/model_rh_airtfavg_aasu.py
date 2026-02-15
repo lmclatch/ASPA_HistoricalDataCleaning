@@ -35,7 +35,7 @@ np.random.seed(42)
 combined_df = pd.read_csv("/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Model Input Data/aasu_airtfavg_train.csv")
 selected_columns = ['TIMESTAMP', 'AirTF_Avg_Aasu'] + [col for col in combined_df.columns if col not in ['TIMESTAMP', 'AirTF_Avg_Aasu']]
 rh_data = combined_df[selected_columns].copy()
-rh_data = rh_data.dropna(subset=['AirTF_Avg_Aasu'])  # Keep only rows where RH_Aasu is not NaN
+rh_data = rh_data.dropna(subset=['AirTF_Avg_Aasu'])  # Keep only rows where is not NaN
 rh_data = rh_data[rh_data.index <= 2500] #only for Airtf_avg_aasu
 
 
