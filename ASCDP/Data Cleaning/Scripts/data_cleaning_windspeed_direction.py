@@ -137,10 +137,10 @@ synoptic_resample_df_1 = process_synoptic_file('/Users/lizamclatchy/Documents/Gi
 def run_forecast_pipeline(
     station_df,
     station_name,
-    target_column= 'WindDir_SD1_WVT',
-    #"WS_mph_S_WVT",
+    target_column= 'WindDir_D1_WVT',
+   # "WS_mph_S_WVT",
     synoptic_dfs=[],
-    feature_columns=["PTemp_C_Max","AirTF_Avg","RH","SlrW_Avg","SlrMJ_Tot","Elevation"],#,"Rain_in_Tot"],
+    feature_columns=["PTemp_C_Max","AirTF_Avg","RH","SlrW_Avg","SlrMJ_Tot","Elevation","Rain_in_Tot"],
     dropna_thresh=0.5,
     station_lat: float = None,     # <<< required for IDW
     station_lon: float = None,     # <<< required for IDW
@@ -252,15 +252,15 @@ def run_forecast_pipeline(
 
 #CHANGE THIS BASED ON STATION AND VARIABLE
 df_train, df_pred = run_forecast_pipeline(
-    station_df=pd.read_csv('/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Raw Data/Aasu_ALL_15min_data_cleaned.csv'),
+    station_df=pd.read_csv('/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Raw Data/Vaipito_ALL_15min_data_cleaned.csv'),
 
-    station_name="Aasu",
-    target_column="WindDir_SD1_WVT",
+    station_name="Vaipito",
+    target_column="WindDir_D1_WVT",
     synoptic_dfs=[synoptic_resample_df, synoptic_resample_df_1],
-    station_lat=-14.31,   # <<< your station’s lat, change based on station
-    station_lon=-170.77,  # <<< your station’s lon, change based on station
+    station_lat=-14.28,   # <<< your station’s lat, change based on station
+    station_lon=-170.71,  # <<< your station’s lon, change based on station
     normalize_weights=False
     )
 #CHANGE THIS NAME
-df_train.to_csv("/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Model Input Data/train_aasu_WindDir_SD1_WVT.csv", index=False)
+df_train.to_csv("/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Model Input Data/train_vaipito_WindDir_D1_WVT.csv", index=False)
 #df_pred.to_csv("/Users/lizamclatchy/ASCDP/Data Cleaning/Cleaned Model Input Data/pred_aasu_WindDir_D1_WVT.csv", index=False)

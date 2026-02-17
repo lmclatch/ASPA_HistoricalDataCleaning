@@ -32,7 +32,7 @@ random.seed(42)
 np.random.seed(42)
 
 #Using a regression model to adequately predict wind data, not forecasting, learning and predicting missing
-combined_df = pd.read_csv("/Users/lizamclatchy/Documents/GitHub/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Model Input Data/train_poloa_WS_mph_S_WVT.csv")
+combined_df = pd.read_csv("/Users/lizamclatchy/Documents/GitHub/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Model Input Data/train_afono_WS_mph_S_WVT.csv")
 selected_columns = ['TIMESTAMP', 'WS_mph_S_WVT'] + [col for col in combined_df.columns if col not in ['TIMESTAMP', 'WS_mph_S_WVT']]
 rh_data = combined_df[selected_columns].copy()
 rh_data = rh_data.dropna(subset=['WS_mph_S_WVT'])  # Keep only rows where is not NaN
@@ -85,7 +85,7 @@ def feature_engineering(df):
         if col != 'TIMESTAMP':
             df[col] = pd.to_numeric(df[col], errors='coerce')
             df['wind_per_rh'] = df['wind_speed_weighted_0_rolling6'] / (df['relative_humidity_weighted_0_rolling6'] + 1e-3)
-            df['solar_per_temp'] = df['SolarMJ_target_rolling6'] / (df['AirTF_target_rolling6'] + 1e-3)
+            df['solar_per_temp'] = df['SolarMJ_target_rolling6'] / (df['Air_TF_target_rolling6'] + 1e-3)
     return df
 # Safe SMAPE calculation to handle zero values
 def smape(y_true, y_pred):
@@ -339,7 +339,7 @@ for name, pred in [
 metrics_df = pd.DataFrame(rows)
 
 # Save (change path/name as you like)
-out_path = "/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Results Analysis/WS_mph_S_WVT_Poloa_error_metrics.csv"
+out_path = "/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Results Analysis/WS_mph_S_WVT_Afono_error_metrics.csv"
 metrics_df.to_csv(out_path, index=False)
 
 #print(f"Saved model metrics to: {out_path}")
@@ -347,9 +347,9 @@ print(metrics_df)
 ###SAVE MODELS
 
 import joblib
-joblib.dump(model_xgb, 'wsmph_poloa_model_xgb.pkl')
-joblib.dump(model_lgbm, 'wsmph_poloa_sd1model_lgbm.pkl')
-joblib.dump(stack, 'wsmph_poloa_stack.pkl')
+joblib.dump(model_xgb, 'wsmph_afono_model_xgb.pkl')
+joblib.dump(model_lgbm, 'wsmph_afono_model_lgbm.pkl')
+joblib.dump(stack, 'wsmph_afono_stack.pkl')
 
 
 import re
@@ -623,7 +623,7 @@ def plot_feature_importance_discrete(
     plt.show()
 
 # --- Usage example for this variable (Std of Wind Direction at Poloa) ---
-TITLE = "Windspeed (m^2/s) of Poloa"
+TITLE = "Windspeed (m/s) of Afono"
 #TITLE = "Std of Wind Direction (\N{DEGREE SIGN}) Afono"
 
 plot_feature_importance_discrete(
