@@ -32,26 +32,6 @@ def circular_weight_components(wd_deg_series, w):
     wd_rad = np.deg2rad(wd)
     return np.sin(wd_rad) * w, np.cos(wd_rad) * w
 
-# def remove_outliers_iqr(df, multiplier=3.0):
-#     """
-#     Remove outliers from all numeric columns using the IQR method.
-#     Keeps TIMESTAMP and non-numeric columns unchanged.
-#     """
-#     df_clean = df.copy()
-#     numeric_cols = df_clean.select_dtypes(include=[np.number]).columns
-    
-#     for col in numeric_cols:
-#         Q1 = df_clean[col].quantile(0.25)
-#         Q3 = df_clean[col].quantile(0.75)
-#         IQR = Q3 - Q1
-#         lower = Q1 - multiplier * IQR
-#         upper = Q3 + multiplier * IQR
-#         # Replace extreme values with NaN (so they get handled naturally in interpolation)
-#         df_clean[col] = df_clean[col].mask((df_clean[col] < lower) | (df_clean[col] > upper))
-    
-#     return df_clean
-
-        #df_clean[col] = series.mask((series < lower) | (series > upper))
 
   #  return df_clean
 def process_synoptic_file(file_path: str, skip_rows: int = 0) -> pd.DataFrame:
@@ -153,20 +133,15 @@ def run_forecast_pipeline(
     
 
     station_df["TIMESTAMP"] = pd.to_datetime(station_df["TIMESTAMP"])
-    # mask = station_df[target_column].str.contains(r'[A-Za-z]', na=False)
-    # station_df = station_df[~mask]
+ 
     station_df = convert_to_numeric(station_df)
-    #station_df = remove_outliers_iqr(station_df)
-    # FIX: target + features selection
-   # station_df = remove_outliers_iqr_safe(
-#     station_df,
-#     multiplier=3.0,
-#     skip_cols=[target_column]   # DO NOT outlier-remove the target
-# )
-
-    required_columns = ["TIMESTAMP", target_column] + feature_columns
-    station_df = station_df[[c for c in required_columns if c in station_df.columns]]
-
+    if target_column == 'WindDir_D1_WVT':
+        wd_rad = np.deg2rad(station_df[target_column])
+        station_df['WindDir_sin'] = np.sin(wd_rad)
+        station_df['WindDir_cos'] = np.cos(wd_rad)
+ 
+    required_columns = ["TIMESTAMP", target_column, "WindDir_sin", "WindDir_cos"] + feature_columns
+    station_df = station_df[[c for c in required_columns if c in station_df.columns]]    
     # Rename target-side features
     station_df = station_df.rename(columns={
         'RH':'RH_target','AirTF_Avg':'AirTF_target','Rain_in_Tot':'Rain_target',
@@ -252,9 +227,9 @@ def run_forecast_pipeline(
 
 #CHANGE THIS BASED ON STATION AND VARIABLE
 df_train, df_pred = run_forecast_pipeline(
-    station_df=pd.read_csv('/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Raw Data/Vaipito_ALL_15min_data_cleaned.csv'),
+    station_df=pd.read_csv('/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Raw Data/Poloa_ALL_15min_data_cleaned.csv'),
 
-    station_name="Vaipito",
+    station_name="Poloa",
     target_column="WindDir_D1_WVT",
     synoptic_dfs=[synoptic_resample_df, synoptic_resample_df_1],
     station_lat=-14.28,   # <<< your station’s lat, change based on station
@@ -262,5 +237,5 @@ df_train, df_pred = run_forecast_pipeline(
     normalize_weights=False
     )
 #CHANGE THIS NAME
-df_train.to_csv("/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Model Input Data/train_vaipito_WindDir_D1_WVT.csv", index=False)
+df_train.to_csv("/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Model Input Data/train_poloa_WindDir_D1_WVT.csv", index=False)
 #df_pred.to_csv("/Users/lizamclatchy/ASCDP/Data Cleaning/Cleaned Model Input Data/pred_aasu_WindDir_D1_WVT.csv", index=False)
