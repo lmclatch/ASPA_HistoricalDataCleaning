@@ -60,7 +60,7 @@ def angular_rmse(y_true_deg, y_pred_deg):
 #CHANGE THIS BASED ON STATION
 combined_df = pd.read_csv(
     "/Users/lizamclatchy/Documents/GitHub/ASPA_HistoricalDataCleaning/ASCDP/"
-    "Data Cleaning/Cleaned Model Input Data/train_poloa_WindDir_D1_WVT.csv"
+    "Data Cleaning/Cleaned Model Input Data/train_aasu_WindDir_D1_WVT.csv"
 )
 
 TARGET_DEG  = "WindDir_D1_WVT"   # raw degrees column (kept for train/pred splits)
@@ -382,7 +382,7 @@ print(metrics_df)
 # CHANGE PATH/NAME
 out_path = (
     "/Users/lizamclatchy/Documents/GitHub/ASPA_HistoricalDataCleaning/ASCDP/"
-    "Results Analysis/WindDir_D1_WVT_poloa_error_metrics.csv"
+    "Results Analysis/WindDir_D1_WVT_aasu_error_metrics.csv"
 )
 metrics_df.to_csv(out_path, index=False)
 
@@ -390,12 +390,12 @@ metrics_df.to_csv(out_path, index=False)
 # 10) Save models
 # ==============================================================================
 
-joblib.dump(xgb_sin,  "WindDir_D1_WVT_poloa_xgb_sin.pkl")
-joblib.dump(xgb_cos,  "WindDir_D1_WVT_poloa_xgb_cos.pkl")
-joblib.dump(lgbm_sin, "WindDir_D1_WVT_poloa_lgbm_sin.pkl")
-joblib.dump(lgbm_cos, "WindDir_D1_WVT_poloa_lgbm_cos.pkl")
-joblib.dump(stack_sin,"WindDir_D1_WVT_poloa_stack_sin.pkl")
-joblib.dump(stack_cos,"WindDir_D1_WVT_poloa_stack_cos.pkl")
+joblib.dump(xgb_sin,  "WindDir_D1_WVT_aasu_xgb_sin.pkl")
+joblib.dump(xgb_cos,  "WindDir_D1_WVT_aasu_xgb_cos.pkl")
+joblib.dump(lgbm_sin, "WindDir_D1_WVT_aasu_lgbm_sin.pkl")
+joblib.dump(lgbm_cos, "WindDir_D1_WVT_aasu_lgbm_cos.pkl")
+joblib.dump(stack_sin,"WindDir_D1_WVT_aasu_stack_sin.pkl")
+joblib.dump(stack_cos,"WindDir_D1_WVT_aasu_stack_cos.pkl")
 
 # ==============================================================================
 # 11) Feature importance (reused from your original code — unchanged)
@@ -519,7 +519,7 @@ def plot_feature_importance_discrete(model, model_type, feature_names,
     plt.show()
 
 
-TITLE = "Wind Direction (°) Poloa"  # CHANGE as needed
+TITLE = "Wind Direction (°) Aasu"  # CHANGE as needed
 
 # Plot for sin model (most informative for direction)
 plot_feature_importance_discrete(
