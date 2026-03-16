@@ -1,652 +1,338 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Wed Jun 11 08:24:39 2025
-
+Data Cleaning Pipeline
 @author: lizamclatchy
 """
 
+import re
 import pandas as pd
-import matplotlib.pyplot as plt
 import numpy as np
-from xgboost import XGBRegressor
-from sklearn.model_selection import train_test_split
-import optuna
-from sklearn.metrics import mean_absolute_error,r2_score
-from sklearn.model_selection import KFold, cross_val_score
-from sklearn.metrics import make_scorer, mean_absolute_error
-from sklearn.model_selection import TimeSeriesSplit
-from sklearn.ensemble import StackingRegressor
-from sklearn.linear_model import RidgeCV
-from sklearn.linear_model import LinearRegression
-from sklearn.svm import SVR
-from lightgbm import LGBMRegressor
-from sklearn.ensemble import StackingRegressor
-from sklearn.linear_model import Ridge
-from sklearn.linear_model import ElasticNetCV
-from sklearn.metrics import mean_absolute_error, r2_score, mean_squared_error
+from functools import reduce
 
-#Set seed
-import random
-random.seed(42)        
-np.random.seed(42)
+# ==============================================================================
+# Configuration
+# ==============================================================================
 
-#Using a regression model to adequately predict wind data, not forecasting, learning and predicting missing
-combined_df = pd.read_csv("/Users/lizamclatchy/Documents/GitHub/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Model Input Data/train_aasu_WS_mph_S_WVT.csv")
-selected_columns = ['TIMESTAMP', 'WS_mph_S_WVT'] + [col for col in combined_df.columns if col not in ['TIMESTAMP', 'WS_mph_S_WVT']]
-rh_data = combined_df[selected_columns].copy()
-rh_data = rh_data.dropna(subset=['WS_mph_S_WVT'])  # Keep only rows where is not NaN
-#rh_data = rh_data[rh_data.index <= 2500] #only for Airtf_avg_aasu
+station_files = {
+    'Aasu':    '/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Raw Data/Aasu_ALL_15min_data_cleaned.csv',
+    'Poloa':   '/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Raw Data/Poloa_ALL_15min_data_cleaned.csv',
+    'Afono':   '/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Raw Data/Afono_ALL_15min_data_cleaned.csv',
+    'Vaipito': '/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Raw Data/Vaipito_ALL_15min_data_cleaned.csv',
+}
 
+cols_to_drop     = ['WS_mph_S_WVT', 'WindDir_D1_WVT', 'WindDir_SD1_WVT', 'RECORD', 'BattV_Avg']
+required_columns = ['TIMESTAMP', 'LAT', 'LON', 'PTemp_C_Max', 'AirTF_Avg',
+                    'SlrW_Avg', 'SlrMJ_Tot', 'RH', 'Rain_in_Tot']
 
+synoptic_files = [
+    '/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Raw Data/NSTU.2022-12-31.csv',
+    '/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Raw Data/SFGP6.2022-12-31.csv',
+]
 
-def feature_engineering(df):
-    df = df.copy()
-    df['TIMESTAMP'] = pd.to_datetime(df['TIMESTAMP'])
-  
-    target_column = 'WS_mph_S_WVT'
-    feature_cols = [col for col in df.columns if col not in ['TIMESTAMP', target_column,'Elevation_target','synoptic_elevation_1','synoptic_elevation_0']]    
-    for col in feature_cols:
-        df[f'{col}_lag1'] = df[col].shift(1)
-        df[f'{col}_lag3'] = df[col].shift(3)
-        df[f'{col}_lag6'] = df[col].shift(6)
-        df[f'{col}_rolling2'] = df[col].rolling(window=2).mean()
-        df[f'{col}_rolling4'] = df[col].rolling(window=4).mean()
-        df[f'{col}_rolling6'] = df[col].rolling(window=6).mean()
-    
-    # Add more granular time features
-    df['hour_of_day'] = pd.to_datetime(df['TIMESTAMP']).dt.hour
-    df['is_daytime'] = ((df['hour_of_day'] >= 6) & (df['hour_of_day'] <= 18)).astype(int)
-    # Day of Week (0=Monday, 6=Sunday)
-    df['day_of_week'] = df['TIMESTAMP'].dt.dayofweek
-    # Season (simplified meteorological)
-    df['month'] = df['TIMESTAMP'].dt.month
-    def get_season(month):
-        if month in [12, 1, 2]:
-            return "winter"
-        elif month in [3, 4, 5]:
-            return "spring"
-        elif month in [6, 7, 8]:
-            return "summer"
-        else:
-            return "fall"
-    
-    df['season'] = df['month'].apply(get_season)
-    # Enforce season as categorical with all 4 categories
-    df['season'] = pd.Categorical(df['season'], categories=["winter", "spring", "summer", "fall"])
-    # One-hot encode with fixed categories
-    season_dummies = pd.get_dummies(df['season'], prefix='season')
-    season_dummies = season_dummies.astype(int)
-    df = pd.concat([df, season_dummies], axis=1)
-    df.drop(columns=['season'], inplace=True)
+# ==============================================================================
+# Utilities
+# ==============================================================================
 
-    
+def convert_to_numeric(df):
     for col in df.columns:
         if col != 'TIMESTAMP':
             df[col] = pd.to_numeric(df[col], errors='coerce')
-            #df['wind_per_rh'] = df['wind_speed_weighted_0_rolling6'] / (df['relative_humidity_weighted_0_rolling6'] + 1e-3)
-            #df['solar_per_temp'] = df['SolarMJ_target_rolling6'] / (df['AirTF_target_rolling6'] + 1e-3)
     return df
-# Safe SMAPE calculation to handle zero values
-def smape(y_true, y_pred):
-    denominator = (np.abs(y_true) + np.abs(y_pred)) / 2.0
-    diff = np.abs(y_true - y_pred)
-    return np.mean(np.where(denominator == 0, 0, diff / denominator)) * 100
 
-def cross_validate_model(model, X, y, n_splits=5):
-    tscv = TimeSeriesSplit(n_splits=n_splits)
-    train_scores, val_scores = [], []
+def haversine_distance(lat1, lon1, lat2, lon2):
+    R = 6371
+    lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = np.sin(dlat / 2)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2)**2
+    c = 2 * np.arcsin(np.sqrt(a))
+    return R * c
 
-    for train_idx, val_idx in tscv.split(X):
-        X_tr, X_val = X.iloc[train_idx], X.iloc[val_idx]
-        y_tr, y_val = y.iloc[train_idx], y.iloc[val_idx]
+def circular_weight_components(wd_deg_series, w):
+    """Correct circular handling: weight sin/cos components, not raw degrees."""
+    wd     = pd.to_numeric(wd_deg_series, errors="coerce")
+    wd_rad = np.deg2rad(wd)
+    return np.sin(wd_rad) * w, np.cos(wd_rad) * w
 
-        model.fit(X_tr, y_tr)
-        train_pred = model.predict(X_tr)
-        val_pred = model.predict(X_val)
+# ==============================================================================
+# Load station data
+# ==============================================================================
 
-        train_mae = mean_absolute_error(y_tr, train_pred)
-        val_mae = mean_absolute_error(y_val, val_pred)
+renamed_stations = []
+stations = {}
 
-        train_scores.append(train_mae)
-        val_scores.append(val_mae)
+for name, path in station_files.items():
+    df = pd.read_csv(path)
+    df["TIMESTAMP"] = pd.to_datetime(df["TIMESTAMP"])
+    df = df.drop(columns=[col for col in cols_to_drop if col in df.columns])
+    df = convert_to_numeric(df)
 
-        print(f"Fold {len(train_scores)} - Train MAE: {train_mae:.4f}, Val MAE: {val_mae:.4f}")
+    if all(col in df.columns for col in required_columns):
+        df_renamed = df[required_columns].copy()
+        df_renamed = df_renamed.rename(columns={
+            col: f"{col}_{name}" for col in required_columns if col != 'TIMESTAMP'
+        })
+        renamed_stations.append(df_renamed)
+        stations[name] = df
+    else:
+        missing = [c for c in required_columns if c not in df.columns]
+        print(f"WARNING: {name} missing columns: {missing}")
 
-    return train_scores, val_scores
-
-def prepare_train_test_data(df, target_column, test_size=0.2):
-    df = df.sort_values(by="TIMESTAMP")
-    train_df, test_df = train_test_split(df, test_size=test_size, shuffle=False)
-    train_df = feature_engineering(train_df)
-    test_df = feature_engineering(test_df)
-    X_train = train_df.drop(columns=[target_column, 'TIMESTAMP'])
-    y_train = train_df[target_column]
-    X_test = test_df.drop(columns=[target_column, 'TIMESTAMP'])
-    y_test = test_df[target_column]
-    X_train = X_train.dropna()
-    y_train = y_train.loc[X_train.index]
-    X_test = X_test.dropna()
-    y_test = y_test.loc[X_test.index]
-    return X_train, X_test, y_train, y_test
-
-target_column = 'WS_mph_S_WVT'
-
-X_train, X_test, y_train, y_test = prepare_train_test_data(rh_data, target_column)
-
-def xgboost_regression(X_train, X_test, y_train, y_test, target_column, n_splits=10):
-
-    # --- 3. Define Objective Function for Optuna with CV ---
-    def objective(trial):
-        params = {
-           'n_estimators': trial.suggest_int('n_estimators', 100, 1000),
-           'max_depth': trial.suggest_int('max_depth', 3, 15),
-           'learning_rate': trial.suggest_float('learning_rate', 0.005, 0.1, log=True),
-           'subsample': trial.suggest_float('subsample', 0.6, 1.0),
-           'colsample_bytree': trial.suggest_float('colsample_bytree', 0.5, 1.0),
-           'gamma': trial.suggest_float('gamma', 0, 1),
-           'min_child_weight': trial.suggest_int('min_child_weight', 1, 10),
-           'lambda': trial.suggest_float('lambda', 1e-3, 10.0, log=True),
-           'alpha': trial.suggest_float('alpha', 1e-3, 10.0, log=True),
-           'objective': 'reg:squarederror',
-           'random_state': 42
-       }
-
-        model = XGBRegressor(**params)
-        tscv = TimeSeriesSplit(n_splits=n_splits)
-        mae_scores = []
-    
-        for train_index, val_index in tscv.split(X_train):
-            model = XGBRegressor(**params)
-            X_tr, X_val = X_train.iloc[train_index], X_train.iloc[val_index]
-            y_tr, y_val = y_train.iloc[train_index], y_train.iloc[val_index]
-            model.fit(X_tr, y_tr)
-            preds = model.predict(X_val)
-            mae_scores.append(mean_absolute_error(y_val, preds))
-    
-        return np.mean(mae_scores)
-
-    # --- 4. Run Optuna ---
-    study = optuna.create_study(direction='minimize', sampler=optuna.samplers.TPESampler(seed=42))
-    study.optimize(objective, n_trials=100)
-    best_params = study.best_params
-    print("Best Params:", best_params)
-
-    # --- 5. Cross-Validate Best Model and Default Model ---
-    best_model = XGBRegressor(**best_params, objective='reg:squarederror', random_state=42)
-    default_model = XGBRegressor(objective='reg:squarederror', random_state=42)
-
-    train_mae_best, val_mae_best = cross_validate_model(best_model, X_train, y_train, n_splits=n_splits)
-    train_mae_default, val_mae_default = cross_validate_model(default_model, X_train, y_train, n_splits=n_splits)
-
-    # --- 6. Plot CV Results ---
-    folds = range(1, len(train_mae_best) + 1)
-    plt.figure(figsize=(12, 6))
-    plt.plot(folds, train_mae_default, 'o-', label='Default Train MAE')
-    plt.plot(folds, val_mae_default, 'o--', label='Default Val MAE')
-    plt.plot(folds, train_mae_best, 's-', label='Tuned Train MAE')
-    plt.plot(folds, val_mae_best, 's--', label='Tuned Val MAE')
-    plt.xlabel("Fold")
-    plt.ylabel("MAE")
-    plt.title("Train vs Validation MAE per Fold (Default vs Tuned)")
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
-
-    # --- 7. Fit Final Model and Evaluate ---
-    best_model.fit(X_train, y_train)
-    y_pred = best_model.predict(X_test)
-    #y_pred = np.clip(y_pred, a_min=0, a_max=None)
-
-    from sklearn.linear_model import LinearRegression
-    lr = LinearRegression().fit(X_train, y_train)
-    print("MAE (Linear):", mean_absolute_error(y_test, lr.predict(X_test)))
-    mae = mean_absolute_error(y_test, y_pred)
-    r2 = r2_score(y_test, y_pred)
-    print(f"MAE: {mae:.4f} mph")
-    print(f"R²:    {r2:.4f}")
-
-    # --- 8. Plot Final Prediction ---
-    plt.figure(figsize=(12, 6))
-    plt.plot(y_test.index, y_test, label='Actual', color='blue')
-    plt.plot(y_test.index, y_pred, label='Predicted', linestyle='--', color='red')
-    plt.title(f'Actual vs Predicted Wind Speed ({target_column})')
-    plt.xlabel("Index")
-    plt.ylabel("Rainfall")
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
-    from xgboost import plot_importance
-
-    plt.figure(figsize=(10, 6))
-    plot_importance(best_model, importance_type='gain', max_num_features=15, title='XGBoost Feature Importance: Rainfall')
-    plt.tight_layout()
-    plt.show()
-    
-    
-    return best_model, y_test, y_pred, best_params
-
-
-
-def lightgbm_regression(X_train, X_test, y_train, y_test, target_column, n_splits=10):
-
-    # --- 2. Define Optuna Objective ---
-    def objective(trial):
-        params = {
-            'n_estimators': trial.suggest_int('n_estimators', 100, 500),
-            'max_depth': trial.suggest_int('max_depth', 3, 10),
-            'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.1, log=True),
-            'feature_fraction': trial.suggest_float('feature_fraction', 0.4, 0.8),
-            'num_leaves': trial.suggest_int('num_leaves', 20, 100),
-            'min_child_samples': trial.suggest_int('min_child_samples', 10, 50),
-            'lambda_l1': trial.suggest_float('lambda_l1', 0, 10),
-            'lambda_l2': trial.suggest_float('lambda_l2', 0, 10),
-            'random_state': 42
-        }
-        model = LGBMRegressor(objective='mae', **params)
-        tscv = TimeSeriesSplit(n_splits=n_splits)
-        mae_scores = []
-        for train_index, val_index in tscv.split(X_train):
-            X_tr, X_val = X_train.iloc[train_index], X_train.iloc[val_index]
-            y_tr, y_val = y_train.iloc[train_index], y_train.iloc[val_index]
-            model.fit(X_tr, y_tr)
-            preds = model.predict(X_val)
-            mae_scores.append(mean_absolute_error(y_val, preds))
-        return np.mean(mae_scores)
-
-    # --- 3. Run Optuna ---
-    study = optuna.create_study(direction='minimize', sampler=optuna.samplers.TPESampler(seed=42))
-    study.optimize(objective, n_trials=100)
-    best_params = study.best_params
-    print("Best Params (LGBM):", best_params)
-
-    # --- 4. Fit Best Model and Evaluate ---
-    best_model = LGBMRegressor(**best_params,objective='mae', random_state=42)
-    best_model.fit(X_train, y_train)
-    y_pred = best_model.predict(X_test)
-    #y_pred = np.clip(y_pred, a_min=0, a_max=None)
-
-
-    mae = mean_absolute_error(y_test, y_pred)
-    r2 = r2_score(y_test, y_pred)
-    print(f"LGBM MAE: {mae:.4f}")
-    print(f"LGBM R²: {r2:.4f}")
-
-    # --- 5. Plot Results ---
-    plt.figure(figsize=(12, 6))
-    plt.plot(y_test.index, y_test, label='Actual', color='blue')
-    plt.plot(y_test.index, y_pred, label='Predicted', linestyle='--', color='green')
-    plt.title(f'Actual vs Predicted ({target_column}) - LightGBM')
-    plt.xlabel("Index")
-    plt.ylabel(target_column)
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
-
-    return best_model, y_test, y_pred, best_params
-
-model_xgb, _, _, best_params = xgboost_regression(X_train, X_test, y_train, y_test, target_column)
-model_lgbm, _, _, best_params_lgbm = lightgbm_regression(X_train, X_test, y_train, y_test,target_column)
-
-estimators = [
-    ('xgb', XGBRegressor(**best_params, objective='reg:squarederror', random_state=42)),
-    ('lgb', LGBMRegressor(**best_params_lgbm, objective='mae',random_state=42)),
-]
-
-from sklearn.ensemble import GradientBoostingRegressor
-stack = StackingRegressor(
-    estimators=estimators,
-    final_estimator=GradientBoostingRegressor(n_estimators=100, random_state=42),
-    passthrough=True,
-    #n_jobs=-1
+combined_df = reduce(
+    lambda left, right: pd.merge(left, right, on='TIMESTAMP', how='outer'),
+    renamed_stations
 )
+combined_df = combined_df.iloc[16:].reset_index(drop=True)
+print(f"Combined shape after load: {combined_df.shape}")
 
-stack.fit(X_train, y_train)
-y_pred_stack = stack.predict(X_test)
-#for rain
-#y_pred_stack = np.clip(stack.predict(X_test), 0, None)
+# ==============================================================================
+# Distance + IDW weighting
+# FIX 1: Use .dropna().iloc[0] instead of hardcoded iloc[75164]
+# ==============================================================================
 
-def safe_mape(y_true, y_pred, eps=1e-8):
-    y_true = np.asarray(y_true, dtype=float)
-    y_pred = np.asarray(y_pred, dtype=float)
-    denom = np.where(np.abs(y_true) < eps, np.nan, np.abs(y_true))
-    return float(np.nanmean(np.abs((y_true - y_pred) / denom)) *     100.0)
+def add_distance_to_target(combined_df, target_station):
+    # FIX: was iloc[75164] — now finds first valid coordinate dynamically
+    tgt_lat = combined_df[f'LAT_{target_station}'].dropna().iloc[0]
+    tgt_lon = combined_df[f'LON_{target_station}'].dropna().iloc[0]
 
-# Predictions
-y_pred_xgb  = model_xgb.predict(X_test)
-y_pred_lgbm = model_lgbm.predict(X_test)
+    for col in combined_df.columns:
+        if col.startswith('LAT_'):
+            name = col.replace('LAT_', '')
+            if name != target_station and f'LON_{name}' in combined_df.columns:
+                dist = haversine_distance(
+                    combined_df[f'LAT_{name}'], combined_df[f'LON_{name}'],
+                    tgt_lat, tgt_lon
+                )
+                combined_df[f'distance_to_{target_station}_{name}'] = dist
+    return combined_df
 
+def apply_idw_weights(combined_df, target_station, power=2):
+    station_list = [s for s in station_files.keys() if s != target_station]
+    base_vars = {
+        col[: -(len(s) + 1)]
+        for s in station_list
+        for col in combined_df.columns
+        if col.endswith(f'_{s}') and not col.startswith('LAT') and not col.startswith('LON')
+    }
 
-# #For Rain_in_Tot_Aasu
-#y_pred_xgb   = np.clip(model_xgb.predict(X_test), 0, None)
-#y_pred_lgbm  = np.clip(model_lgbm.predict(X_test), 0, None)
-#y_pred_stack = np.clip(stack.predict(X_test), 0, None)
+    for var in base_vars:
+        for s in station_list:
+            col_name = f"{var}_{s}"
+            dist_col = f'distance_to_{target_station}_{s}'
+            if col_name in combined_df.columns and dist_col in combined_df.columns:
+                w = 1 / (combined_df[dist_col] ** power + 1e-6)
+                combined_df[f'weighted_{var}_{s}'] = combined_df[col_name] * w
 
-# Metrics table
-rows = []
-for name, pred in [
-    ("XGBoost",   y_pred_xgb),
-    ("LightGBM",  y_pred_lgbm),
-    ("Stacked",   y_pred_stack),
-]:
-    mae  = mean_absolute_error(y_test, pred)
-    rmse = np.sqrt(mean_squared_error(y_test, pred))
-    r2   = r2_score(y_test, pred)
-    mape = safe_mape(y_test, pred)
-    rows.append({"model": name, "MAE": mae, "RMSE": rmse, "R2": r2, "MAPE_%": mape})
+    return combined_df
 
-metrics_df = pd.DataFrame(rows)
+# ==============================================================================
+# Synoptic processing
+# ==============================================================================
 
-# Save (change path/name as you like)
-out_path = "/Users/lizamclatchy/Documents/GitHub/ASPA_HistoricalDataCleaning/ASCDP/Results Analysis/WS_mph_S_WVT_aasu_Aasu_error_metrics.csv"
-metrics_df.to_csv(out_path, index=False)
+def process_synoptic_file(path):
+    df = pd.read_csv(path, skiprows=[1])
+    df["TIMESTAMP"] = pd.to_datetime(df["TIMESTAMP"], utc=True, errors='coerce').dt.tz_localize(None)
+    df['TIMESTAMP'] = df['TIMESTAMP'].dt.round('15min')
+    df = df[df['TIMESTAMP'].notna()]
 
-#print(f"Saved model metrics to: {out_path}")
-print(metrics_df)
-###SAVE MODELS
+    lat = df['LAT'].iloc[0] if 'LAT' in df.columns else None
+    lon = df['LON'].iloc[0] if 'LON' in df.columns else None
 
-import joblib
-joblib.dump(model_xgb, 'WS_mph_S_WVT_aasu_model_xgb.pkl')
-joblib.dump(model_lgbm, 'WS_mph_S_WVT_aasu_model_lgbm.pkl')
-joblib.dump(stack, 'WS_mph_S_WVT_aasu_stack.pkl')
+    df = df[['TIMESTAMP', 'air_temp_set_1', 'relative_humidity_set_1',
+             'wind_speed_set_1', 'wind_direction_set_1', 'Elevation']]
 
+    df['wind_direction_set_1']    = pd.to_numeric(df['wind_direction_set_1'],    errors='coerce')
+    df['wind_speed_set_1']        = pd.to_numeric(df['wind_speed_set_1'],        errors='coerce')
+    df['air_temp_set_1']          = pd.to_numeric(df['air_temp_set_1'],          errors='coerce')
+    df['relative_humidity_set_1'] = pd.to_numeric(df['relative_humidity_set_1'], errors='coerce')
 
-import re
-import textwrap
-import numpy as np
-import matplotlib.pyplot as plt
+    df   = df.groupby('TIMESTAMP', as_index=False).mean(numeric_only=True)
+    temp = df.set_index('TIMESTAMP')
 
-# --- DISCRETE HEC palette in your custom order ---
-HEC_DISCRETE = [
-    "#5F4690FF",  # deep purple
-    "#1D6996FF",  # blue
-    "#38A6A5FF",  # teal
-    "#0F8554FF",  # green
-    "#73AF48FF",  # light green
-    "#EDAD08FF",  # yellow
-    "#E17C05FF",  # orange
-    "#CC503EFF",  # red-orange
-    "#94346EFF",  # magenta
-    "#6F4070FF",  # mauve
-    "#994E95FF",  # purple-pink
-    "#666666FF",  # gray
-]
+    if not isinstance(temp.index, pd.DatetimeIndex):
+        raise TypeError("TIMESTAMP index is not DatetimeIndex after grouping.")
 
-# --- Base rename map (covers bases; lag/rolling handled automatically) ---
-rename_map = {
-    # Wind (weighted)
-    "wind_speed_weighted_0": "Pago Pago weighted wind speed",
-    "wind_speed_weighted_1": "Siufaga Ridge weighted wind speed",
+    # Circular wind direction interpolation
+    wd_rad = np.deg2rad(temp['wind_direction_set_1'])
+    u_i    = temp['wind_speed_set_1'] * np.sin(wd_rad)
+    v_i    = temp['wind_speed_set_1'] * np.cos(wd_rad)
 
-    # Air temp / RH (weighted)
-    "air_temp_weighted_0": "Pago Pago weighted air temperature",
-    "air_temp_weighted_1": "Siufaga Ridge weighted air temperature",
-    "relative_humidity_weighted_0": "Pago Pago weighted relative humidity",
-    "relative_humidity_weighted_1": "Siufaga Ridge weighted relative humidity",
+    try:
+        u_interp  = u_i.resample('15min').interpolate('akima')
+        v_interp  = v_i.resample('15min').interpolate('akima')
+        wd_interp = np.rad2deg(np.arctan2(u_interp, v_interp))
+        wd_interp = (wd_interp + 360) % 360
+    except Exception:
+        wd_interp = temp['wind_direction_set_1'].resample('15min').interpolate('nearest')
 
-    # Target station vars
-    "PTemp_target": "Max. temperature of target station",
-    "AirTF_target": "Air temperature of target station",
-    "RH_target": "Relative humidity of target station",
-    "SolarW_target": "Solar radiation of target station (W/m²)",
-    "SolarMJ_target": "Solar energy of target station (MJ/m²)",
+    df_int = temp[['air_temp_set_1', 'relative_humidity_set_1',
+                   'wind_speed_set_1', 'Elevation']].resample('15min').interpolate('akima')
 
-    # Wind direction encodings (weighted)
-    "wind_direction_sin_weighted_0": "Pago Pago weighted wind direction (sin)",
-    "wind_direction_cos_weighted_0": "Pago Pago weighted wind direction (cos)",
-    "wind_direction_sin_weighted_1": "Siufaga Ridge weighted wind direction (sin)",
-    "wind_direction_cos_weighted_1": "Siufaga Ridge weighted wind direction (cos)",
-
-    # Calendar / indicators
-    "month": "Month",
-    "Day_of_week": "Day of week",
-    "Season_summer": "Summer",
-    "Season_winter": "Winter",
-    "is_daytime": "Daytime",
-
-    # Other
-    "solar_per_temp": "Solar / Temp",
-}
-
-# ---------- label helpers ----------
-def sentence_case(s: str) -> str:
-    s = (s or "").strip()
-    return s[:1].upper() + s[1:] if s else s
-
-def wrap_label(s: str, width: int = 28, max_lines=None) -> str:
-    """
-    Wrap label text to a given width.
-    If max_lines is None, keep all lines (no truncation).
-    """
-    lines = textwrap.wrap(s, width=width)
-    if max_lines is not None:
-        lines = lines[:max_lines]
-    return "\n".join(lines)
-
-def _mins_to_pretty(mins: int) -> str:
-    h, m = divmod(int(mins), 60)
-    if h and m:
-        return f"{h}h {m}m"
-    if h:
-        return f"{h}h"
-    return f"{m}m"
-
-def annotate_lag_rolling_from_shifts(label: str, step_minutes: int = 15) -> str:
-    """
-    Your 15-min feature engineering:
-      lag1 = shift(2)  => 30m
-      lag3 = shift(5)  => 1h 15m
-      lag6 = shift(7)  => 1h 45m
-    Rolling windows:
-      rolling2 => 30m, rolling4 => 1h, rolling6 => 1h 30m
-    """
-    out = label
-
-    lag_label_to_shift_steps = {"1": 2, "3": 5, "6": 7}
-
-    def repl_lag(m):
-        lag_label = m.group(2)
-        steps = lag_label_to_shift_steps.get(lag_label, int(lag_label))
-        mins = steps * step_minutes
-        return f"{m.group(1)}{lag_label} ({_mins_to_pretty(mins)})"
-
-    out = re.sub(r"\b(lag\s+)(\d+)\b(?!\s*\()", repl_lag, out, flags=re.IGNORECASE)
-
-    def repl_roll(m):
-        n = int(m.group(2))
-        mins = n * step_minutes
-        return f"{m.group(1)}{n} ({_mins_to_pretty(mins)})"
-
-    out = re.sub(r"\b(rolling\s+)(\d+)\b(?!\s*\()", repl_roll, out, flags=re.IGNORECASE)
+    out = df_int.reset_index()
+    out['wind_direction_set_1'] = wd_interp.values
+    out['LAT'] = lat
+    out['LON'] = lon
     return out
 
-# --- base fallback renaming for *_lag# and *_rolling# ---
-def rename_one_feature(raw_key: str, rename_map: dict) -> str:
+def integrate_synoptic(df, combined_df_with_coords, target_station, synoptic_dfs):
     """
-    Robust renamer:
-    - exact match on raw_key
-    - case/whitespace-insensitive lookup
-    - base-key fallback for *_lag# and *_rolling#
+    FIX 2: was using stations[target_station]['LAT'].iloc[75164]
+    Now correctly reads LAT_{target_station} from combined_df with first valid value.
     """
-    if not rename_map:
-        return raw_key
+    start       = df['TIMESTAMP'].min()
+    end         = df['TIMESTAMP'].max()
+    station_lat = combined_df_with_coords[f'LAT_{target_station}'].dropna().iloc[0]
+    station_lon = combined_df_with_coords[f'LON_{target_station}'].dropna().iloc[0]
 
-    # normalised map: strip + lowercase
-    norm_map = {k.strip().lower(): v for k, v in rename_map.items()}
+    for i, syn_df in enumerate(synoptic_dfs):
+        if syn_df.empty:
+            continue
+        syn_df  = syn_df[(syn_df['TIMESTAMP'] >= start) & (syn_df['TIMESTAMP'] <= end)].copy()
+        syn_df  = convert_to_numeric(syn_df)
+        merged  = pd.merge(df[['TIMESTAMP']], syn_df, on='TIMESTAMP', how='left')
 
-    # 1) exact match
-    if raw_key in rename_map:
-        return rename_map[raw_key]
+        syn_lat = syn_df['LAT'].dropna().iloc[0]
+        syn_lon = syn_df['LON'].dropna().iloc[0]
+        dist    = max(haversine_distance(syn_lat, syn_lon, station_lat, station_lon), 0.1)
+        weight  = 1 / (dist ** 2)
 
-    # 2) case/whitespace-insensitive match
-    key_clean = raw_key.strip().lower()
-    if key_clean in norm_map:
-        return norm_map[key_clean]
+        sin_w, cos_w = circular_weight_components(merged['wind_direction_set_1'], weight)
+        df[f'wind_direction_sin_weighted_{i}'] = sin_w.values
+        df[f'wind_direction_cos_weighted_{i}'] = cos_w.values
+        df[f'wind_speed_weighted_{i}']         = merged['wind_speed_set_1'].values        * weight
+        df[f'air_temp_weighted_{i}']           = merged['air_temp_set_1'].values          * weight
+        df[f'relative_humidity_weighted_{i}']  = merged['relative_humidity_set_1'].values * weight
+        df[f'synoptic_elevation_{i}']          = syn_df['Elevation'].iloc[0]
 
-    # 3) base fallback for *_lag# / *_rolling#
-    base_raw = re.sub(r"_(rolling|lag)\d+$", "", raw_key)
-    base_clean = base_raw.strip().lower()
+    return df
 
-    if base_raw in rename_map:
-        base_label = rename_map[base_raw]
-    elif base_clean in norm_map:
-        base_label = norm_map[base_clean]
-    else:
-        return raw_key  # nothing matched
+# ==============================================================================
+# FIX 3: drop only true intermediates, NOT weighted_* feature columns
+# Old: 'weight_' in col matched 'weighted_SlrW_Avg_Afono' and dropped it
+# New: col.startswith('weight_') only matches 'weight_Afono', 'weight_Poloa' etc.
+# ==============================================================================
 
-    # build suffix from raw key ("rolling2" -> "rolling 2")
-    suffix = raw_key[len(base_raw):].lstrip("_")
-    suffix = re.sub(r"(rolling|lag)(\d+)", r"\1 \2", suffix, flags=re.IGNORECASE)
-    if suffix:
-        return f"{base_label}, {suffix}"
-    return base_label
+def drop_unused_columns(df):
+    drop_cols = [
+        col for col in df.columns
+        if col.startswith('distance_')
+        or col.startswith('weight_')    # raw IDW scalars only, NOT weighted_* features
+        or col.startswith('LAT_')
+        or col.startswith('LON_')
+    ]
+    print(f"Dropping intermediates: {drop_cols}")
+    return df.drop(columns=drop_cols)
 
-def rename_features(features,
-                    rename_map=None,
-                    step_minutes: int = 15,
-                    wrap_width: int = 28,
-                    max_lines: int = 3):
-    """
-    Rename raw feature keys, annotate lag/rolling with time (e.g. 30m),
-    sentence-case them, and wrap into up to max_lines lines.
-    """
-    if rename_map is None:
-        renamed = list(features)
-    else:
-        renamed = [rename_one_feature(f, rename_map) for f in features]
+# ==============================================================================
+# Run pipeline — CHANGE target_station as needed
+# ==============================================================================
 
-    renamed = [annotate_lag_rolling_from_shifts(s, step_minutes=step_minutes) for s in renamed]
-    renamed = [sentence_case(s) for s in renamed]
-    renamed = [wrap_label(s, width=wrap_width, max_lines=max_lines) for s in renamed]
-    return renamed
+target_station = 'Vaipito'  # CHANGE THIS
 
-# ---------- plotting with normalized gain (% of total) ----------
-def plot_feature_importance_discrete(
-    model,
-    model_type,
-    feature_names,
-    max_features=10,
-    importance_type="gain",
-    title=None,
-    high_is_dark=True,     # "highest importance gets earliest palette color"
-    rename_map=None,
-    palette=HEC_DISCRETE,
-    step_minutes: int = 15,
-    wrap_width: int = 28,
-    max_lines: int = 3,
-    tick_fontsize: int = 9,
-    label_fontsize: int = 10,
-    title_fontsize: int = 12,
-    normalize: str = "sum",   # "sum" -> % of total gain
-):
-    # ---- extract (feature, importance) pairs ----
-    if model_type.lower() == "xgboost":
-        score = model.get_booster().get_score(importance_type=importance_type)
-        pairs = []
-        for k, v in score.items():
-            if k.startswith("f"):
-                idx = int(k[1:])
-                fname = feature_names[idx] if idx < len(feature_names) else k
-            else:
-                fname = k
-            pairs.append((fname, float(v)))
+synoptic_dfs = [process_synoptic_file(p) for p in synoptic_files]
 
-    elif model_type.lower() == "lightgbm":
-        vals = model.booster_.feature_importance(importance_type=importance_type)
-        names = model.booster_.feature_name()
-        imp_map = dict(zip(names, vals))
-        pairs = [(fn, float(imp_map.get(fn, 0.0))) for fn in feature_names]
-    else:
-        raise ValueError("model_type must be 'xgboost' or 'lightgbm'")
+combined_df = add_distance_to_target(combined_df, target_station)
+combined_df = apply_idw_weights(combined_df, target_station)
+combined_df = integrate_synoptic(combined_df, combined_df, target_station, synoptic_dfs)
+combined_df = drop_unused_columns(combined_df)
 
-    # ---- sort + select top features ----
-    pairs = sorted(pairs, key=lambda x: x[1], reverse=True)[:max_features]
+print(f"Final shape: {combined_df.shape}")
+print(f"Final columns:\n{combined_df.columns.tolist()}")
 
-    # Reverse for barh so largest ends up at top
-    feat_raw = [p[0] for p in pairs][::-1]
-    imp = np.array([p[1] for p in pairs][::-1], dtype=float)
+# ==============================================================================
+# Optional: drop known missing sensor columns before splitting
+# Uncomment as needed per target station/variable
+# ==============================================================================
+# combined_df = combined_df.drop(columns=['SlrMJ_Tot_Poloa'],  errors='ignore')
+# combined_df = combined_df.drop(columns=['SlrW_Avg_Poloa'],   errors='ignore')
+# combined_df = combined_df.drop(columns=['SlrW_Avg_Vaipito'], errors='ignore')
+# combined_df = combined_df.drop(columns=['RH_Aasu'],          errors='ignore')
+# combined_df = combined_df.drop(columns=['AirTF_Avg_Aasu'],   errors='ignore')
+# combined_df = combined_df.drop(columns=['Rain_in_Tot_Aasu'], errors='ignore')
 
-    # --- normalize gain ---
-    xlabel = f"Importance ({importance_type})"
-    if normalize == "sum":
-        total = imp.sum()
-        if total > 0:
-            imp = imp / total * 100.0
-            xlabel = "Relative importance (% of total gain)"
-    elif normalize == "max":
-        m = imp.max()
-        if m > 0:
-            imp = imp / m
-            xlabel = "Relative importance (0–1, normalized)"
+# ==============================================================================
+# Date config
+# ==============================================================================
 
-    # rename + annotate + wrap
-    feat = rename_features(
-        feat_raw,
-        rename_map=rename_map,
-        step_minutes=step_minutes,
-        wrap_width=wrap_width,
-        max_lines=max_lines,
-    )
+date_config = {
+    ('Vaipito', 'SlrW_Avg'): {
+        "cutoff": "2022-03-23 10:30:00",
+        "start":  "2022-03-23 10:30:00",
+        "end":    "2022-08-14 13:30:00",
+    },
+    ('Vaipito', 'SlrMJ_Tot'): {
+        "cutoff": "2022-03-23 10:30:00",
+        "start":  "2022-03-23 10:30:00",
+        "end":    "2022-08-14 13:30:00",
+    },
+    ('Aasu', 'RH'): {
+        "cutoff": "2020-03-09 08:45:00",
+        "start":  "2020-03-09 08:45:00",
+        "end":    "2021-04-10 22:00:00",
+    },
+    ('Aasu', 'AirTF_Avg'): {
+        "cutoff": "2020-03-09 08:45:00",
+        "start":  "2020-03-09 08:45:00",
+        "end":    "2021-04-10 22:00:00",
+    },
+    ('Poloa', 'SlrW_Avg'): {
+        "cutoff": "2022-03-22 06:00:00",
+        "start":  "2022-03-22 06:00:00",
+        "end":    "2022-08-14 11:30:00",
+    },
+    ('Poloa', 'SlrMJ_Tot'): {
+        "cutoff": "2022-03-22 06:00:00",
+        "start":  "2022-03-22 06:00:00",
+        "end":    "2022-08-14 11:30:00",
+    },
+    ('Aasu', 'Rain_in_Tot'): {
+        "cutoff": "2020-04-14 00:20:00",
+        "start":  "2020-04-14 00:20:00",
+        "end":    "2022-03-25 13:45:00",
+    },
+}
 
-    # discrete rank -> color (no interpolation)
-    ranks_desc = np.arange(len(pairs))  # 0=highest
-    if not high_is_dark:
-        ranks_desc = ranks_desc[::-1]
-    ranks_for_plot = ranks_desc[::-1]   # match barh order
-    colors = [palette[i % len(palette)] for i in ranks_for_plot]
+# ==============================================================================
+# Train / pred split
+# ==============================================================================
 
-    fig, ax = plt.subplots(figsize=(10, 6))
-    bars = ax.barh(feat, imp, color=colors)
+def create_train_pred_splits(df, target_station, target_variable, config_dict,
+                              simulate_missing=True):
+    key = (target_station, target_variable)
+    if key not in config_dict:
+        raise ValueError(f"No date config found for key {key}")
 
-    ax.set_xlabel(xlabel, fontsize=label_fontsize)
-    ax.set_title(title or f"{model_type.capitalize()} Feature Importance (top {max_features})",
-                 fontsize=title_fontsize)
-    ax.tick_params(axis="both", labelsize=tick_fontsize)
+    date_cfg = config_dict[key]
+    cutoff   = pd.to_datetime(date_cfg['cutoff'])
+    start    = pd.to_datetime(date_cfg['start'])
+    end      = pd.to_datetime(date_cfg['end'])
 
-    # add % labels on bars when normalized by sum
-    if normalize == "sum":
-        max_imp = max(imp) if len(imp) else 0
-        for bar, val in zip(bars, imp):
-            ax.text(
-                bar.get_width() + max_imp * 0.01,
-                bar.get_y() + bar.get_height() / 2,
-                f"{val:.1f}%",
-                va="center",
-                ha="left",
-                fontsize=tick_fontsize,
-            )
+    target_col          = f"{target_variable}_{target_station}"
+    non_target_features = [c for c in df.columns if c not in ['TIMESTAMP', target_col]]
 
-    fig.tight_layout()
-    # extra room on the left for long multi-line labels
-    fig.subplots_adjust(left=0.35)
-    plt.show()
+    df       = df.dropna(subset=non_target_features, how='all')
+    df_train = df[df['TIMESTAMP'] <= cutoff].dropna()
+    df_pred  = df[(df['TIMESTAMP'] > start) & (df['TIMESTAMP'] < end)].copy()
 
-# --- Usage example for this variable (Std of Wind Direction at Poloa) ---
-TITLE = "Wind Speed (m/s) Aasu"
-#TITLE = "Std of Wind Direction (\N{DEGREE SIGN}) Vaipito"
+    if simulate_missing and target_col in df_pred.columns:
+        df_pred[target_col] = np.nan
 
-plot_feature_importance_discrete(
-    model_lgbm,
-    model_type="lightgbm",
-    feature_names=X_train.columns,
-    max_features=10,
-    importance_type="gain",
-    title=f"LightGBM: {TITLE}",
-    rename_map=rename_map,
-    normalize="sum",
+    print(f"Train: {df_train.shape}  {df_train['TIMESTAMP'].min()} → {df_train['TIMESTAMP'].max()}")
+    print(f"Pred:  {df_pred.shape}   {df_pred['TIMESTAMP'].min()} → {df_pred['TIMESTAMP'].max()}")
+
+    return df_train, df_pred
+
+# ==============================================================================
+# Example call — CHANGE as needed
+# ==============================================================================
+
+df_train, df_pred = create_train_pred_splits(
+    combined_df,
+    target_station='Vaipito',
+    target_variable='SlrMJ_Tot',
+    config_dict=date_config
 )
 
-plot_feature_importance_discrete(
-    model_xgb,
-    model_type="xgboost",
-    feature_names=X_train.columns,
-    max_features=10,
-    importance_type="gain",
-    title=f"XGBoost: {TITLE}",
-    rename_map=rename_map,
-    normalize="sum",
-)
-
-
-
+df_train.to_csv("/Users/lizamclatchy/Documents/Github/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Model Input Data/vaipito_SlrMJ_Tot_train.csv", index=False)
+# df_pred.to_csv(".../vaipito_SlrMJ_Tot_pred.csv", index=False)
