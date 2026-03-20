@@ -32,10 +32,10 @@ random.seed(42)
 np.random.seed(42)
 
 #Using a regression model to adequately predict wind data, not forecasting, learning and predicting missing
-combined_df = pd.read_csv("/Users/lizamclatchy/Documents/GitHub/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Model Input Data/aasu_Rain_in_Tot_train.csv")
-selected_columns = ['TIMESTAMP', 'Rain_in_Tot_Aasu'] + [col for col in combined_df.columns if col not in ['TIMESTAMP', 'Rain_in_Tot_Aasu']]
+combined_df = pd.read_csv("/Users/lizamclatchy/Documents/GitHub/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Model Input Data/poloa_SlrMJ_Tot_train.csv")
+selected_columns = ['TIMESTAMP', 'SlrMJ_Tot_Poloa'] + [col for col in combined_df.columns if col not in ['TIMESTAMP', 'SlrMJ_Tot_Poloa']]
 rh_data = combined_df[selected_columns].copy()
-rh_data = rh_data.dropna(subset=['Rain_in_Tot_Aasu'])  # Keep only rows where is not NaN
+rh_data = rh_data.dropna(subset=['SlrMJ_Tot_Poloa'])  # Keep only rows where is not NaN
 #rh_data = rh_data[rh_data.index <= 2500] #only for Airtf_avg_aasu
 
 
@@ -44,7 +44,7 @@ def feature_engineering(df):
     df = df.copy()
     df['TIMESTAMP'] = pd.to_datetime(df['TIMESTAMP'])
   
-    target_column = 'Rain_in_Tot_Aasu'
+    target_column = 'SlrMJ_Tot_Poloa'
     feature_cols = [col for col in df.columns if col not in ['TIMESTAMP', target_column,'Elevation_target','synoptic_elevation_1','synoptic_elevation_0']]    
     for col in feature_cols:
         df[f'{col}_lag1'] = df[col].shift(1)
@@ -130,7 +130,7 @@ def prepare_train_test_data(df, target_column, test_size=0.2):
     y_test = y_test.loc[X_test.index]
     return X_train, X_test, y_train, y_test
 
-target_column = 'Rain_in_Tot_Aasu'
+target_column = 'SlrMJ_Tot_Poloa'
 
 X_train, X_test, y_train, y_test = prepare_train_test_data(rh_data, target_column)
 
@@ -339,7 +339,7 @@ for name, pred in [
 metrics_df = pd.DataFrame(rows)
 
 # Save (change path/name as you like)
-out_path = "/Users/lizamclatchy/Documents/GitHub/ASPA_HistoricalDataCleaning/ASCDP/Results Analysis/Rain_in_Tot_Aasu_error_metrics.csv"
+out_path = "/Users/lizamclatchy/Documents/GitHub/ASPA_HistoricalDataCleaning/ASCDP/Results Analysis/SlrMJ_Tot_Poloa_error_metrics.csv"
 metrics_df.to_csv(out_path, index=False)
 
 #print(f"Saved model metrics to: {out_path}")
@@ -347,9 +347,9 @@ print(metrics_df)
 ###SAVE MODELS
 
 import joblib
-joblib.dump(model_xgb, 'Rain_in_Tot_model_xgb.pkl')
-joblib.dump(model_lgbm, 'Rain_in_Tot_model_lgbm.pkl')
-joblib.dump(stack, 'Rain_in_Tot_stack.pkl')
+joblib.dump(model_xgb, 'SlrMJ_Tot_Poloa_model_xgb.pkl')
+joblib.dump(model_lgbm, 'SlrMJ_Tot_Poloa_model_lgbm.pkl')
+joblib.dump(stack, 'SlrMJ_Tot_Poloa_stack.pkl')
 
 
 import re
