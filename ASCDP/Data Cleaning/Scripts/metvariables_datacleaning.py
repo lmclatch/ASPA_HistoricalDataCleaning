@@ -244,12 +244,23 @@ print(f"Final columns:\n{combined_df.columns.tolist()}")
 # Optional: drop known missing sensor columns before splitting
 # Uncomment as needed per target station/variable
 # ==============================================================================
-# combined_df = combined_df.drop(columns=['SlrMJ_Tot_Poloa'],  errors='ignore')
-combined_df = combined_df.drop(columns=['SlrW_Avg_Poloa'],   errors='ignore')
-combined_df = combined_df.drop(columns=['SlrW_Avg_Vaipito'], errors='ignore')
+#combined_df = combined_df.drop(columns=['SlrMJ_Tot_Poloa'],  errors='ignore')
+#combined_df = combined_df.drop(columns=['weighted_SlrMJ_Tot_Poloa'], errors='ignore')
+combined_df = combined_df.drop(columns=['SlrW_Avg_Poloa'],             errors='ignore')
+combined_df = combined_df.drop(columns=['SlrW_Avg_Vaipito'],           errors='ignore')
+combined_df = combined_df.drop(columns=['SlrMJ_Tot_Vaipito'],          errors='ignore')
+combined_df = combined_df.drop(columns=['weighted_SlrW_Avg_Poloa'],    errors='ignore')
+combined_df = combined_df.drop(columns=['weighted_SlrW_Avg_Vaipito'],  errors='ignore')
+combined_df = combined_df.drop(columns=['weighted_SlrMJ_Tot_Vaipito'], errors='ignore')
 #combined_df = combined_df.drop(columns=['RH_Aasu'],          errors='ignore')
+#combined_df = combined_df.drop(columns=['weighted_RH_Aasu'],          errors='ignore')
+
 #combined_df = combined_df.drop(columns=['AirTF_Avg_Aasu'],   errors='ignore')
+#combined_df = combined_df.drop(columns=['weighted_AirTF_Avg_Aasu'],   errors='ignore')
+
 #combined_df = combined_df.drop(columns=['Rain_in_Tot_Aasu'], errors='ignore')
+#combined_df = combined_df.drop(columns=['weighted_Rain_in_Tot_Aasu'], errors='ignore')
+
 
 # ==============================================================================
 # Date config
