@@ -228,7 +228,7 @@ def drop_unused_columns(df):
 # Run pipeline — CHANGE target_station as needed
 # ==============================================================================
 
-target_station = 'Vaipito'  # CHANGE THIS
+target_station = 'Poloa'  # CHANGE THIS
 
 synoptic_dfs = [process_synoptic_file(p) for p in synoptic_files]
 
@@ -246,12 +246,13 @@ print(f"Final columns:\n{combined_df.columns.tolist()}")
 # ==============================================================================
 combined_df = combined_df.drop(columns=['SlrMJ_Tot_Poloa'],  errors='ignore')
 combined_df = combined_df.drop(columns=['weighted_SlrMJ_Tot_Poloa'], errors='ignore')
-combined_df = combined_df.drop(columns=['SlrW_Avg_Poloa'],             errors='ignore')
+#combined_df = combined_df.drop(columns=['SlrW_Avg_Poloa'],             errors='ignore')
 combined_df = combined_df.drop(columns=['SlrW_Avg_Vaipito'],           errors='ignore')
-#combined_df = combined_df.drop(columns=['SlrMJ_Tot_Vaipito'],          errors='ignore')
-combined_df = combined_df.drop(columns=['weighted_SlrW_Avg_Poloa'],    errors='ignore')
+combined_df = combined_df.drop(columns=['SlrMJ_Tot_Vaipito'],          errors='ignore')
+#combined_df = combined_df.drop(columns=['weighted_SlrW_Avg_Poloa'],    errors='ignore')
 combined_df = combined_df.drop(columns=['weighted_SlrW_Avg_Vaipito'],  errors='ignore')
-#combined_df = combined_df.drop(columns=['weighted_SlrMJ_Tot_Vaipito'], errors='ignore')
+combined_df = combined_df.drop(columns=['weighted_SlrMJ_Tot_Vaipito'], errors='ignore')
+
 #combined_df = combined_df.drop(columns=['RH_Aasu'],          errors='ignore')
 #combined_df = combined_df.drop(columns=['weighted_RH_Aasu'],          errors='ignore')
 
@@ -340,10 +341,10 @@ def create_train_pred_splits(df, target_station, target_variable, config_dict,
 
 df_train, df_pred = create_train_pred_splits(
     combined_df,
-    target_station='Vaipito',
-    target_variable='SlrMJ_Tot',
+    target_station='Poloa',
+    target_variable='SlrW_Avg',
     config_dict=date_config
 )
 
-df_train.to_csv("/Users/lizamclatchy/Documents/GitHub/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Model Input Data/vaipito_SlrMJ_Tot_train.csv", index=False)
+df_train.to_csv("/Users/lizamclatchy/Documents/GitHub/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Model Input Data/poloa_Slr_Avg_train.csv", index=False)
 # df_pred.to_csv(".../vaipito_SlrMJ_Tot_pred.csv", index=False)
