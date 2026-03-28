@@ -32,10 +32,10 @@ random.seed(42)
 np.random.seed(42)
 
 #Using a regression model to adequately predict wind data, not forecasting, learning and predicting missing
-combined_df = pd.read_csv("/Users/lizamclatchy/Documents/GitHub/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Model Input Data/poloa_Slr_Avg_train.csv")
-selected_columns = ['TIMESTAMP', 'SlrW_Avg_Poloa'] + [col for col in combined_df.columns if col not in ['TIMESTAMP', 'SlrW_Avg_Poloa']]
+combined_df = pd.read_csv("/Users/lizamclatchy/Documents/GitHub/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Model Input Data/vaipito_Slr_Avg_train.csv")
+selected_columns = ['TIMESTAMP', 'SlrW_Avg_Vaipito'] + [col for col in combined_df.columns if col not in ['TIMESTAMP', 'SlrW_Avg_Vaipito']]
 rh_data = combined_df[selected_columns].copy()
-rh_data = rh_data.dropna(subset=['SlrW_Avg_Poloa'])  # Keep only rows where is not NaN
+rh_data = rh_data.dropna(subset=['SlrW_Avg_Vaipito'])  # Keep only rows where is not NaN
 #rh_data = rh_data[rh_data.index <= 2500] #only for Airtf_avg_aasu
 
 
@@ -44,7 +44,7 @@ def feature_engineering(df):
     df = df.copy()
     df['TIMESTAMP'] = pd.to_datetime(df['TIMESTAMP'])
   
-    target_column = 'SlrW_Avg_Poloa'
+    target_column = 'SlrW_Avg_Vaipito'
     feature_cols = [col for col in df.columns if col not in ['TIMESTAMP', target_column,'Elevation_target','synoptic_elevation_1','synoptic_elevation_0']]    
     for col in feature_cols:
         df[f'{col}_lag1'] = df[col].shift(1)
@@ -130,7 +130,7 @@ def prepare_train_test_data(df, target_column, test_size=0.2):
     y_test = y_test.loc[X_test.index]
     return X_train, X_test, y_train, y_test
 
-target_column = 'SlrW_Avg_Poloa'
+target_column = 'SlrW_Avg_Vaipito'
 
 X_train, X_test, y_train, y_test = prepare_train_test_data(rh_data, target_column)
 
@@ -339,7 +339,7 @@ for name, pred in [
 metrics_df = pd.DataFrame(rows)
 
 # Save (change path/name as you like)
-out_path = "/Users/lizamclatchy/Documents/GitHub/ASPA_HistoricalDataCleaning/ASCDP/Results Analysis/SlrW_Avg_Poloa_error_metrics.csv"
+out_path = "/Users/lizamclatchy/Documents/GitHub/ASPA_HistoricalDataCleaning/ASCDP/Results Analysis/SlrW_Avg_Vaipito_error_metrics.csv"
 metrics_df.to_csv(out_path, index=False)
 
 #print(f"Saved model metrics to: {out_path}")
@@ -347,9 +347,9 @@ print(metrics_df)
 ###SAVE MODELS
 
 import joblib
-joblib.dump(model_xgb, 'SlrW_Avg_Poloa_model_xgb.pkl')
-joblib.dump(model_lgbm, 'SlrW_Avg_Poloa_model_lgbm.pkl')
-joblib.dump(stack, 'SlrW_Avg_Poloa_stack.pkl')
+joblib.dump(model_xgb, 'SlrW_Avg_Vaipito_model_xgb.pkl')
+joblib.dump(model_lgbm, 'SlrW_Avg_Vaipito_model_lgbm.pkl')
+joblib.dump(stack, 'SlrW_Avg_Vaipito_stack.pkl')
 
 
 import re
