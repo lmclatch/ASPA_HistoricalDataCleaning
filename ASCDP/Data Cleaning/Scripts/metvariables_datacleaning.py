@@ -228,7 +228,7 @@ def drop_unused_columns(df):
 # Run pipeline — CHANGE target_station as needed
 # ==============================================================================
 
-target_station = 'Vaipito'  # CHANGE THIS
+target_station = 'Aasu'  # CHANGE THIS
 
 synoptic_dfs = [process_synoptic_file(p) for p in synoptic_files]
 
@@ -244,23 +244,23 @@ print(f"Final columns:\n{combined_df.columns.tolist()}")
 # Optional: drop known missing sensor columns before splitting
 # Uncomment as needed per target station/variable
 # ==============================================================================
-combined_df = combined_df.drop(columns=['SlrMJ_Tot_Poloa'],  errors='ignore')
-combined_df = combined_df.drop(columns=['weighted_SlrMJ_Tot_Poloa'], errors='ignore')
-combined_df = combined_df.drop(columns=['SlrW_Avg_Poloa'],             errors='ignore')
+#combined_df = combined_df.drop(columns=['SlrMJ_Tot_Poloa'],  errors='ignore')
+#combined_df = combined_df.drop(columns=['weighted_SlrMJ_Tot_Poloa'], errors='ignore')
+#combined_df = combined_df.drop(columns=['SlrW_Avg_Poloa'],             errors='ignore')
 #combined_df = combined_df.drop(columns=['SlrW_Avg_Vaipito'],           errors='ignore')
-combined_df = combined_df.drop(columns=['SlrMJ_Tot_Vaipito'],          errors='ignore')
-combined_df = combined_df.drop(columns=['weighted_SlrW_Avg_Poloa'],    errors='ignore')
+#combined_df = combined_df.drop(columns=['SlrMJ_Tot_Vaipito'],          errors='ignore')
+#combined_df = combined_df.drop(columns=['weighted_SlrW_Avg_Poloa'],    errors='ignore')
 #combined_df = combined_df.drop(columns=['weighted_SlrW_Avg_Vaipito'],  errors='ignore')
-combined_df = combined_df.drop(columns=['weighted_SlrMJ_Tot_Vaipito'], errors='ignore')
+#combined_df = combined_df.drop(columns=['weighted_SlrMJ_Tot_Vaipito'], errors='ignore')
 
 #combined_df = combined_df.drop(columns=['RH_Aasu'],          errors='ignore')
 #combined_df = combined_df.drop(columns=['weighted_RH_Aasu'],          errors='ignore')
 
-#combined_df = combined_df.drop(columns=['AirTF_Avg_Aasu'],   errors='ignore')
-#combined_df = combined_df.drop(columns=['weighted_AirTF_Avg_Aasu'],   errors='ignore')
+combined_df = combined_df.drop(columns=['AirTF_Avg_Aasu'],   errors='ignore')
+combined_df = combined_df.drop(columns=['weighted_AirTF_Avg_Aasu'],   errors='ignore')
 
-#combined_df = combined_df.drop(columns=['Rain_in_Tot_Aasu'], errors='ignore')
-#combined_df = combined_df.drop(columns=['weighted_Rain_in_Tot_Aasu'], errors='ignore')
+combined_df = combined_df.drop(columns=['Rain_in_Tot_Aasu'], errors='ignore')
+combined_df = combined_df.drop(columns=['weighted_Rain_in_Tot_Aasu'], errors='ignore')
 
 
 # ==============================================================================
@@ -341,10 +341,10 @@ def create_train_pred_splits(df, target_station, target_variable, config_dict,
 
 df_train, df_pred = create_train_pred_splits(
     combined_df,
-    target_station='Vaipito',
-    target_variable='SlrW_Avg',
+    target_station='Aasu',
+    target_variable='RH',
     config_dict=date_config
 )
 
-df_train.to_csv("/Users/lizamclatchy/Documents/GitHub/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Model Input Data/vaipito_Slr_Avg_train.csv", index=False)
+df_train.to_csv("/Users/lizamclatchy/Documents/GitHub/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Model Input Data/aasu_rh_train.csv", index=False)
 # df_pred.to_csv(".../vaipito_SlrMJ_Tot_pred.csv", index=False)
