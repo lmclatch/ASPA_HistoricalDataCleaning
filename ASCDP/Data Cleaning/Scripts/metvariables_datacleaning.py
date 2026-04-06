@@ -253,11 +253,11 @@ print(f"Final columns:\n{combined_df.columns.tolist()}")
 #combined_df = combined_df.drop(columns=['weighted_SlrW_Avg_Vaipito'],  errors='ignore')
 #combined_df = combined_df.drop(columns=['weighted_SlrMJ_Tot_Vaipito'], errors='ignore')
 
-#combined_df = combined_df.drop(columns=['RH_Aasu'],          errors='ignore')
-#combined_df = combined_df.drop(columns=['weighted_RH_Aasu'],          errors='ignore')
+combined_df = combined_df.drop(columns=['RH_Aasu'],          errors='ignore')
+combined_df = combined_df.drop(columns=['weighted_RH_Aasu'],          errors='ignore')
 
-combined_df = combined_df.drop(columns=['AirTF_Avg_Aasu'],   errors='ignore')
-combined_df = combined_df.drop(columns=['weighted_AirTF_Avg_Aasu'],   errors='ignore')
+#combined_df = combined_df.drop(columns=['AirTF_Avg_Aasu'],   errors='ignore')
+#combined_df = combined_df.drop(columns=['weighted_AirTF_Avg_Aasu'],   errors='ignore')
 
 combined_df = combined_df.drop(columns=['Rain_in_Tot_Aasu'], errors='ignore')
 combined_df = combined_df.drop(columns=['weighted_Rain_in_Tot_Aasu'], errors='ignore')
@@ -342,9 +342,9 @@ def create_train_pred_splits(df, target_station, target_variable, config_dict,
 df_train, df_pred = create_train_pred_splits(
     combined_df,
     target_station='Aasu',
-    target_variable='RH',
+    target_variable='AirTF_Avg',
     config_dict=date_config
 )
 
-df_train.to_csv("/Users/lizamclatchy/Documents/GitHub/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Model Input Data/aasu_rh_train.csv", index=False)
+df_train.to_csv("/Users/lizamclatchy/Documents/GitHub/ASPA_HistoricalDataCleaning/ASCDP/Data Cleaning/Cleaned Model Input Data/aasu_airtfavg_train.csv", index=False)
 # df_pred.to_csv(".../vaipito_SlrMJ_Tot_pred.csv", index=False)
