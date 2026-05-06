@@ -1,3 +1,27 @@
+# OS junk
 .DS_Store
 **/.DS_Store
+Thumbs.db
+
+# Model artifacts
 *.pkl
+*.joblib
+
+# Local data (fetched from cshuler repo at runtime)
+ASCDP/Raw Input Data/
+ASCDP/Data Cleaning/Cleaned Raw Data/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+
+# Conda / venv
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
