@@ -1,0 +1,17 @@
+name: dev
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.12
+  - pandas
+  - scikit-learn
+  - seaborn
+  - matplotlib
+  - xgboost
+  - jupyterlab
+  - optuna
+  - spyder
+  - lightgbm
+  - openpyxl
+prefix: /opt/anaconda3/envs/dev
