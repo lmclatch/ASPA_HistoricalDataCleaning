@@ -1,1 +1,8 @@
 *.pkl
+
+.env
+ASCDP/Raw Input Data/Synoptic/_raw_json/
+
+ASCDP/Raw Input Data/
+
+ASCDP/Raw Input Data/
