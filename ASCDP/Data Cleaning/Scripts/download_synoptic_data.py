@@ -102,6 +102,12 @@ def get_token() -> str:
     return token
 
 
+def _redact(text: str, token: str) -> str:
+    """Keep the token out of anything we print. Tracebacks and log files
+    outlive the terminal session they were created in."""
+    return text.replace(token, "***REDACTED***") if token else text
+
+
 def fetch_station_year(stid: str, year: int, token: str) -> dict:
     """One API call: a single station, a single calendar year.
 
@@ -125,13 +131,32 @@ def fetch_station_year(stid: str, year: int, token: str) -> dict:
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             resp = requests.get(BASE_URL, params=params, timeout=REQUEST_TIMEOUT_SEC)
+
+            # 4xx means the request itself is wrong (bad token, tier limit,
+            # unavailable station). Retrying cannot fix it, so fail fast with
+            # a readable message instead of hammering the API three more times.
+            if 400 <= resp.status_code < 500:
+                raise PermissionError(
+                    f"HTTP {resp.status_code} for {stid} {year}. "
+                    "Common causes: token not valid or not yet provisioned; "
+                    "requested date range outside your access tier; station "
+                    "not included in your plan. Try a small recent request "
+                    "first:  .../v2/stations/latest?stid=" + stid
+                )
+
             resp.raise_for_status()
             payload = resp.json()
+        except PermissionError:
+            raise
         except (requests.RequestException, ValueError) as exc:
             if attempt == MAX_RETRIES:
-                raise
+                raise RuntimeError(
+                    f"Request failed for {stid} {year}: "
+                    f"{_redact(str(exc), token)}"
+                ) from None
             wait = RETRY_BACKOFF_SEC * attempt
-            print(f"    attempt {attempt} failed ({exc}); retrying in {wait}s")
+            print(f"    attempt {attempt} failed "
+                  f"({_redact(str(exc), token)}); retrying in {wait}s")
             time.sleep(wait)
             continue
 
@@ -254,8 +279,9 @@ def tidy_frame(df: pd.DataFrame, year_lo: int, year_hi: int) -> pd.DataFrame:
 # MAIN
 # ---------------------------------------------------------------------------
 
-def download_station(stid: str, years: range, token: str, force: bool) -> pd.DataFrame:
-    cache_dir = OUT_DIR / "_raw_json"
+def download_station(stid: str, years: range, token: str, force: bool,
+                     out_dir: Path) -> pd.DataFrame:
+    cache_dir = out_dir / "_raw_json"
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     frames = []
@@ -313,22 +339,21 @@ def main() -> None:
                         help="Ignore cached JSON and re-request from the API.")
     args = parser.parse_args()
 
-    global OUT_DIR
-    OUT_DIR = args.out
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    out_dir = args.out
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     token = get_token()
     years = range(args.start_year, args.end_year + 1)
 
     for stid in args.stations:
         print(f"\n{stid} ({args.start_year}-{args.end_year})")
-        df = download_station(stid, years, token, args.force)
+        df = download_station(stid, years, token, args.force, out_dir)
 
         if df.empty:
             print(f"  {stid}: nothing returned, skipping write")
             continue
 
-        out_path = OUT_DIR / f"{stid}_{args.start_year}-{args.end_year}.csv"
+        out_path = out_dir / f"{stid}_{args.start_year}-{args.end_year}.csv"
         df.to_csv(out_path, index=False)
         report_coverage(stid, df)
         print(f"  wrote {out_path}")
